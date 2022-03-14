@@ -49,19 +49,35 @@ function apply_H(n::Unsigned, L)
     output
 end
 
-function build_basis_N(T::DataType, L::Integer, N::Integer)
-    # TODO: lines a and b seem to be allocating while c doesn't 
-    # according to julia --track-allocation=user. This could be hitting performance.
+function build_basis_N(T::K, L::Integer, N::Integer) where K <: DataType
     cardinality = binomial(L, N)
-    basis = Array{T, 1}(undef, cardinality) # c
+    basis = zeros(T, cardinality)
 
-    ei = ~((~zero(T)) << N) # a
+    ei = ~(typemax(T) << N)
     for i in 1:cardinality
-        basis[i] = ei
-        ei = next_basis_element(ei) # b
+        basis[i] += ei
+        ei = next_basis_element(ei)
     end
 
     basis
+end
+
+function build_HN(L, N)
+    basis = build_basis_N(UInt32, L, N)
+    d = length(basis)
+    HN = zeros(d, d)
+
+    index_map = Dict(basis .=> 1:d)
+
+    for (b, n) in enumerate(basis)
+        output = apply_H(n, L)
+        for (m, h) in output
+            a = index_map[m]
+            HN[a, b] += h
+        end
+    end
+
+    HN
 end
 
 #======================================================#
