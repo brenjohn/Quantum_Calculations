@@ -145,6 +145,79 @@ function build_HNk(L, N, k)
     HNk
 end
 
+#======================================================#
+# Maximum Symmetry Sector
+#======================================================#
+
+function build_HMSS(L)
+    basis = build_MSS_basis(L)
+    d = length(basis)
+    HMSS = zeros(d, d)
+    index_map = Dict(e => i for (i, (e, qp)) in enumerate(basis))
+
+    for (b, (n, qpn)) in enumerate(basis)
+        output = apply_H(n, L)
+        Zn4L = √qpn
+        for (m, h) in output
+            m_srs, qpm = super_representative_state(m, L)
+            a = index_map[m_srs]
+            Zm4L = √qpm
+            HMSS[a, b] += (Zn4L/Zm4L) * h
+        end
+    end
+
+    HMSS
+end
+
+function build_MSS_basis(L)
+    basis = []
+    basisNk = build_basis_Nk(UInt32, L, L÷2, 0)
+
+    for (n, p) in basisNk
+        n, nx, nr, nrx = related_representative_states(n, L)
+        if n <= min(nx, nr, nrx)
+            q = length(unique((n, nx, nr, nrx)))
+            push!(basis, (n, q*p))
+        end
+    end
+
+    basis
+end
+
+function super_representative_state(n, L)
+    n, nx, nr, nrx = related_representative_states(n, L)
+    n_srs = min(n, nx, nr, nrx)
+    n_srs, length(unique((n, nx, nr, nrx)))
+end
+
+function related_representative_states(n, L)
+    nx = invert(n, L)
+    nr = reflect(n, L)
+    nrx = reflect(invert(n, L), L)
+
+    n,   p,   d   = representative_state(n, L)
+    nx,  px,  dx  = representative_state(nx, L)
+    nr,  pr,  dr  = representative_state(nr, L)
+    nrx, prx, drx = representative_state(nrx, L)
+    n, nx, nr, nrx
+end
+
+function invert(n::T, L) where T <: Unsigned
+    mask = ~(typemax(T) << L)
+    mask ⊻ n
+end
+
+function reflect(n::T, L) where T <: Unsigned
+    nr = zero(T)
+    i = 0
+    while i < L
+        nr <<= 1
+        nr |= n & one(T)
+        n >>= 1
+        i += 1
+    end
+    nr
+end
 
 #======================================================#
 # Utility functions
