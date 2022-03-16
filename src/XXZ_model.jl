@@ -1,5 +1,7 @@
 # TODO: Use type parametrisation to generate different hamiltonian functions
 # ie use Δ and λ as types and specialise on those.
+
+# TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
 function apply_H(n::Unsigned, L)
     Δ = 2
     λ = 0.2
@@ -49,6 +51,10 @@ function apply_H(n::Unsigned, L)
     output
 end
 
+#======================================================#
+# Building HN
+#======================================================#
+
 function build_basis_N(T::K, L::Integer, N::Integer) where K <: DataType
     cardinality = binomial(L, N)
     basis = zeros(T, cardinality)
@@ -79,6 +85,66 @@ function build_HN(L, N)
 
     HN
 end
+
+#======================================================#
+# Building HNk
+#======================================================#
+
+function build_basis_Nk(T::K, L, N, k) where K <: DataType
+    basis = Tuple{T, Int64}[]
+    basis_N = build_basis_N(T, L, N)
+
+    for n in basis_N
+        m, p = representative_state(n, L)
+        if (n == m) && ((k * p) % L == 0)
+            push!(basis, (n, p))
+        end
+    end
+    basis
+end
+
+function representative_state(n::Unsigned, L)
+    # This function assumes there are no bits beyond the L-th bit.
+    # If there is one this will go into an infinite loop.
+    rs = n
+    d = 0
+    m = translate(n, L)
+    p = 1
+    while m != n
+        m < rs && (rs = m; d = p)
+        p += 1
+        m = translate(m, L)
+    end
+    rs, p, L - d
+end
+
+function translate(n::T, L)::T where T <: Union{UInt32, UInt64}
+    m = n << 1
+    m |= (n >> (L-1))
+    m & ~(typemax(T) << L)
+end
+
+function build_HNk(L, N, k)
+    basis = build_basis_Nk(UInt32, L, N, k)
+    d = length(basis)
+    HNk = zeros(d, d)
+    index_map = Dict(e => i for (i, (e, p)) in enumerate(basis))
+    ωk = cispi(2 * k / L)
+
+    for (b, (n, pn)) in enumerate(basis)
+        output = apply_H(n, L)
+        YnL = √pn
+        for (m, h) in output
+            m_rs, pm, d = representative_state(m, L)
+            a = index_map[m_rs]
+            YmL = (√pm)
+            HNk[a, b] += (YnL/YmL) * ωk^d * h
+        end
+    end
+
+    HNk
+end
+
 
 #======================================================#
 # Utility functions
