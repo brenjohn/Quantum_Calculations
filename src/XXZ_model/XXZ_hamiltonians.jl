@@ -9,9 +9,7 @@
 """
 Returns the image of n under the action of the XXZ Hamiltonian.
 """
-function apply_H(n::Unsigned, L)
-    Δ = 2
-    λ = 0.2
+function apply_H(n::Unsigned, L, Δ, λ)
 
     n_aligned = number_of_aligned_neighbours(n, 1, L)
     diag = (-Δ/2) * (2*n_aligned - L)
@@ -58,6 +56,19 @@ function apply_H(n::Unsigned, L)
     output
 end
 
+function build_H(L, Δ = 2, λ = 0.2)
+    d = 2^L
+    H = zeros(d, d)
+
+    for b in UInt32(0):UInt32(2^L-1)
+        output = apply_H(b, L, Δ, λ)
+        for (a, h) in output
+            H[a+1, b+1] += h
+        end
+    end
+    H
+end
+
 
 #======================================================#
 # Particle Number Sector
@@ -67,7 +78,7 @@ end
 Returns the Hamiltonian for the N-particle sector of the XXZ model
 of length L.
 """
-function build_HN(L, N)
+function build_HN(L, N, Δ = 2, λ = 0.2)
     basis = build_basis_N(UInt32, L, N)
     d = length(basis)
     HN = zeros(d, d)
@@ -75,7 +86,7 @@ function build_HN(L, N)
     index_map = Dict(basis .=> 1:d)
 
     for (b, n) in enumerate(basis)
-        output = apply_H(n, L)
+        output = apply_H(n, L, Δ, λ)
         for (m, h) in output
             a = index_map[m]
             HN[a, b] += h
@@ -94,7 +105,7 @@ end
 Returns the Hamiltonian of the particle-momentum sector N, k 
 for the XXZ model with length L.
 """
-function build_HNk(L, N, k)
+function build_HNk(L, N, k, Δ = 2, λ = 0.2)
     basis = build_basis_Nk(UInt32, L, N, k)
     d = length(basis)
     HNk = zeros(d, d)
@@ -102,7 +113,7 @@ function build_HNk(L, N, k)
     ωk = cispi(2 * k / L)
 
     for (b, (n, pn)) in enumerate(basis)
-        output = apply_H(n, L)
+        output = apply_H(n, L, Δ, λ)
         YnL = √pn
         for (m, h) in output
             m_rs, pm, d = representative_state(m, L)
@@ -124,14 +135,14 @@ end
 Returns the Hamiltonian for the XXZ model of length L in the
 maximum symmetry sector.
 """
-function build_HMSS(L)
+function build_HMSS(L, Δ = 2, λ = 0.2)
     basis = build_MSS_basis(L)
     d = length(basis)
     HMSS = zeros(d, d)
     index_map = Dict(e => i for (i, (e, qp)) in enumerate(basis))
 
     for (b, (n, qpn)) in enumerate(basis)
-        output = apply_H(n, L)
+        output = apply_H(n, L, Δ, λ)
         Zn4L = √qpn
         for (m, h) in output
             m_srs, qpm = super_representative_state(m, L)
