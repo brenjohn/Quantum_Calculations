@@ -103,7 +103,7 @@ function build_MSS_basis(L)
     basisNk = build_basis_Nk(UInt32, L, L÷2, 0)
 
     for (n, p) in basisNk
-        n, nx, nr, nrx = related_representative_states(n, L)
+        n, nx, nr, nrx, _ = related_representative_states(n, L)
         if n <= min(nx, nr, nrx)
             q = length(unique((n, nx, nr, nrx)))
             push!(basis, (n, q*p))
@@ -126,5 +126,5 @@ function related_representative_states(n, L)
     nx,  px,  dx  = representative_state(nx, L)
     nr,  pr,  dr  = representative_state(nr, L)
     nrx, prx, drx = representative_state(nrx, L)
-    n, nx, nr, nrx
+    n, nx, nr, nrx, p
 end

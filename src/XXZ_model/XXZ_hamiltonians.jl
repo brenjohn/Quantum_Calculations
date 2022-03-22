@@ -6,6 +6,8 @@
 # ie use Δ and λ as types and specialise on those.
 
 # TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
+
+# TODO use bits_differ function for periodic boundary condition checks.
 """
 Returns the image of n under the action of the XXZ Hamiltonian.
 """
@@ -17,39 +19,39 @@ function apply_H(n::Unsigned, L, Δ, λ)
     if λ > 0
         n_aligned = number_of_aligned_neighbours(n, 2, L)
         diag2 = (-Δ/2) * (2*n_aligned - L)
-        diag = diag/(1+λ) + λ * diag2
+        diag = (diag + λ * diag2) / (1+λ)
     end
 
     output = [(n, diag)]
     for l = 0:L-2
-        if ((n & (1 << l)) << 1) ⊻ (n & (1 << (l+1))) != 0 # If n[l] != n[l+1]
+        if bits_differ(n, l, l+1 )# ((n & (1 << l)) << 1) ⊻ (n & (1 << (l+1))) != 0 # If n[l] != n[l+1]
             m = flipbits(n, l, l+1)
-            push!(output, (m, -1))
+            push!(output, (m, -1/(1+λ)))
         end
     end
 
     # Periodic boundary condition
     if (n & 1) ⊻ (n >> (L-1)) != 0
         m = flipbits(n, 0, L-1)
-        push!(output, (m, -1))
+        push!(output, (m, -1/(1+λ)))
     end
 
     if λ > 0
         for l = 0:L-3
-            if ((n & (1 << l)) << 2) ⊻ (n & (1 << (l+2))) != 0 # If n[l] != n[l+2]
+            if bits_differ(n, l, l+2) #((n & (1 << l)) << 2) ⊻ (n & (1 << (l+2))) != 0 # If n[l] != n[l+2]
                 m = flipbits(n, l, l+2)
-                push!(output, (m, -λ))
+                push!(output, (m, -λ/(1+λ)))
             end
         end
 
         # Periodic boundary condition
         if (n & 1) ⊻ ((n >> (L-2)) & 1) != 0
             m = flipbits(n, 0, L-2)
-            push!(output, (m, -λ))
+            push!(output, (m, -λ/(1+λ)))
         end
         if (n & 2) ⊻ ((n >> (L-2)) & 2) != 0
             m = flipbits(n, 1, L-1)
-            push!(output, (m, -λ))
+            push!(output, (m, -λ/(1+λ)))
         end
     end
 
@@ -160,7 +162,7 @@ Returns the super representative state of the equivalence classes related to
 the equivalence class containing n.
 """
 function super_representative_state(n, L)
-    n, nx, nr, nrx = related_representative_states(n, L)
+    n, nx, nr, nrx, p = related_representative_states(n, L)
     n_srs = min(n, nx, nr, nrx)
-    n_srs, length(unique((n, nx, nr, nrx)))
+    n_srs, length(unique((n, nx, nr, nrx))) * p
 end
