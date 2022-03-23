@@ -13,7 +13,7 @@ integers.
 
 include("utils.jl")
 include("XXZ_basis.jl")
-include("XXZ_hamiltonians.jl")
-include("observables.jl")
+include("XXZ_observables.jl")
+include("XXZ_sector_matrices.jl")
 
 end

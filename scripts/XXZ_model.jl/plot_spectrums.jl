@@ -12,10 +12,11 @@ L = 8
 ### Create Hamiltonians
 ###
 
-H    = XXZ.build_H(L, Δ, λ)
-HN   = XXZ.build_HN(L, L÷2, Δ, λ)
-HNk  = XXZ.build_HNk(L, L÷2, 0, Δ, λ)
-HMSS = XXZ.build_HMSS(L, Δ, λ)
+h    = XXZ.apply_H
+H    = XXZ.build_matrix(h, L, Δ, λ)
+HN   = XXZ.build_matrix_N(h, L, L÷2, Δ, λ)
+HNk  = XXZ.build_matrix_Nk(h, L, L÷2, 0, Δ, λ)
+HMSS = XXZ.build_matrix_MSS(h, L, Δ, λ)
 
 
 ###
@@ -34,10 +35,8 @@ specMSS = Hermitian(HMSS) |> eigvals
 f = Figure()
 a = Axis(f[1, 1], xlabel="α/|S|", ylabel="α", title="Spectra for H, HN, HNk, HMSS with L=$L Δ=$Δ λ=$λ")
 
-i = 0
-for (s, l) in ((spec, "full"), (specN, "SN"), (specNk, "SNk"), (specMSS, "SMSS"))
+for (i, s, l) in ((1, spec, "full"), (2, specN, "SN"), (3, specNk, "SNk"), (4, specMSS, "SMSS"))
     scatter!(LinRange(0, 1, length(s)), s, label=l, markersize = 20 - 4*i)
-    i += 1
 end
 
 a.yticks = -4:6

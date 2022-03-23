@@ -12,7 +12,7 @@ df = DataFrame(L = Int[], Es = Vector[], As = Vector[], Bs = Vector[])
 
 for L in [8, 12, 16, 20]
     @info "Running for L = $L"
-    H = XXZ.build_HMSS(L, Δ, λ)
+    H = XXZ.build_matrix_MSS(XXZ.apply_H, L, Δ, λ)
     F = Hermitian(H) |> eigen
     d = length(F.values)
 
