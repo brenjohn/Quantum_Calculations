@@ -26,7 +26,7 @@ function apply_H(n::Unsigned, L, Δ, λ)
 
     output = [(n, diag)]
     for l = 0:L-2
-        if bits_differ(n, l, l+1 )# ((n & (1 << l)) << 1) ⊻ (n & (1 << (l+1))) != 0 # If n[l] != n[l+1]
+        if bits_differ(n, l, l+1 )
             m = flipbits(n, l, l+1)
             push!(output, (m, nn_weight))
         end
@@ -40,7 +40,7 @@ function apply_H(n::Unsigned, L, Δ, λ)
 
     if λ > 0
         for l = 0:L-3
-            if bits_differ(n, l, l+2) #((n & (1 << l)) << 2) ⊻ (n & (1 << (l+2))) != 0 # If n[l] != n[l+2]
+            if bits_differ(n, l, l+2)
                 m = flipbits(n, l, l+2)
                 push!(output, (m, nnn_weight))
             end

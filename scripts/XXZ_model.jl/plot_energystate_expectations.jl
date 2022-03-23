@@ -31,7 +31,7 @@ for L in [8, 12, 16, 20]
 end
 
 ###
-### Plot spectra
+### Plot expectation values.
 ###
 
 f = Figure(resolution=(2800, 1200), fontsize=35)
