@@ -18,7 +18,7 @@ df = DataFrame(L = Int[], ts = Vector[], As = Vector[], Bs = Vector[])
 for L in L_range
     @info "Running for L = $L"
     basis = XXZ.build_MSS_basis(L)
-    index_map = Dict(e => i for (i, (e, p)) in enumerate(basis))
+    # index_map = Dict(e => i for (i, (e, p)) in enumerate(basis))
 
     ψ0 = zeros(length(basis))
     ψ0[end] = 1
@@ -33,7 +33,7 @@ for L in L_range
     Ct[:, 1] = C0
 
     U = cis.(-dt * F.values) |> Diagonal
-    for (i, t) in enumerate(t_range)
+    for i in 1:length(t_range)
         Ct[:, i+1] = U * Ct[:, i]
     end
 
