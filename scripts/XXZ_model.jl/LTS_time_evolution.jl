@@ -8,7 +8,7 @@ include(srcdir("XXZ_model/XXZ_model.jl"))
 Δ = 0.5
 λ = 1.0
 L = 12
-ϵ = 0.01
+ϵ = 0.1
 N_steps = 50
 
 ψ0 = zeros(ComplexF64, 2^L)
@@ -44,7 +44,7 @@ Ext_Bs = [ψ' * B * ψ |> real for ψ in eachcol(ψt)]
 ### Lie-Trotter-Suzuki evolution.
 ###
 
-ψt = XXZ.LTS_evolution(ψ0, L, Δ, 0, ϵ, N_steps)
+ψt = XXZ.LTS_evolution(ψ0, L, Δ, λ, ϵ, N_steps)
 LTS_As = [ψ' * A * ψ |> real for ψ in eachcol(ψt)]
 LTS_Bs = [ψ' * B * ψ |> real for ψ in eachcol(ψt)]
 

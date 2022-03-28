@@ -129,7 +129,7 @@ L is assumed to be even,
 function LTS_evolution(ψ0, L, Δ, λ, ϵ, N_steps)
     if λ == 0
         return _LTS_evolution_nn_interactions(ψ0, L, Δ, ϵ, N_steps)
-    elseif L ÷ 4 == 0
+    elseif L % 4 == 0
         return _LTS_evolution_nnn_interactions(ψ0, L, Δ, λ, ϵ, N_steps)
     else
         error("nnn LTS evolution is only supported when L is a multiple of 4.")

@@ -128,3 +128,19 @@ function related_representative_states(n, L)
     nrx, prx, drx = representative_state(nrx, L)
     n, nx, nr, nrx, p
 end
+
+function MSS_to_full_basis(n::T, L) where T <: Unsigned
+    ns = zeros(T, L); ns[1] = n
+    nxs = zeros(T, L); nxs[1] = invert(n, L)
+    nrs = zeros(T, L); nrs[1] = reverse(n, L)
+    nrxs = zeros(T, L); nrxs[1] = reverse(invert(n, L), L)
+
+    for i = 2:L
+        ns[i] = translate(ns[i-1], L)
+        nxs[i] = translate(nxs[i-1], L)
+        nrs[i] = translate(nrs[i-1], L)
+        nrxs[i] = translate(nrxs[i-1], L)
+    end
+
+    [ns; nxs; nrs; nrxs]
+end
