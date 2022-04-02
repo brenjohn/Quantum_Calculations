@@ -80,7 +80,7 @@ a = Axis(f[1, 1], xlabel="L1", ylabel="Sₑ", title=title)
 scatter!(0:L, Se)
 ylims!(a, 0, 7)
 
-record(f, joinpath(plotsdir(), "entanglement_evolution.gif"), 0:length(t_range);
+record(f, joinpath(plotsdir("XXZ"), "entanglement_evolution.gif"), 0:length(t_range);
         framerate = framerate) do t
     time_step[] = t
 end

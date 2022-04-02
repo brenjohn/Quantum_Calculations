@@ -62,3 +62,5 @@ for (i, d) in enumerate(eachrow(df))
     lines!(d.ts, d.Bs, label="B: L = $(d.L)", linewidth = 2i)
 end
 axislegend(a, position = :rb)
+
+save(joinpath(plotsdir("XXZ"), "evolution_of_observable_expectation.png"), f)

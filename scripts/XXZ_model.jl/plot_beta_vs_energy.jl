@@ -46,3 +46,5 @@ for d in eachrow(df)
 end
 a.yticks = 0:2
 axislegend(a, position = :rt)
+
+save(joinpath(plotsdir("XXZ"), "beta_vs_energy.png"), f)

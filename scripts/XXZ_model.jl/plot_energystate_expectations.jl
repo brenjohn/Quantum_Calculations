@@ -44,10 +44,11 @@ a.yticks = 0:6
 axislegend(a, position = :rt)
 
 
-
 a = Axis(f[1, 2], xlabel="E/L", ylabel="Expectation", title="Energy eigenstate expectation of nn-interaction energy density")
 for d in eachrow(df)
     scatter!(f[1, 2], d.Es/d.L, d.Bs, markersize = 28 - d.L, label="L = $(d.L)")
 end
 a.yticks = 0.12:0.03:0.27
 axislegend(a, position = :lb)
+
+# save(joinpath(plotsdir("XXZ"), "eigenstate_expectation_vs_L.png"), f)

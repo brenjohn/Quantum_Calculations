@@ -8,7 +8,7 @@ include(srcdir("XXZ_model/XXZ_model.jl"))
 Δ = 0.5
 λ = 1.0
 L = 12
-ϵ = 0.1
+ϵ = 0.3
 N_steps = 50
 
 ψ0 = zeros(ComplexF64, 2^L)
@@ -60,3 +60,5 @@ lines!(0:ϵ:ϵ*(N_steps-1), LTS_Bs, label="LTS B")
 lines!(0:ϵ:ϵ*(N_steps-1), Ext_As, label="Exact A")
 lines!(0:ϵ:ϵ*(N_steps-1), Ext_Bs, label="Exact B")
 axislegend(a, position = :rb)
+
+save(joinpath(plotsdir("XXZ"), "LTS_evolution_comparison.png"), f)
