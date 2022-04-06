@@ -64,9 +64,15 @@ function build_matrix_Nk(operator::Function, L, N, k, args...)
         YnL = √pn
         for (m, h) in output
             m_rs, pm, d = representative_state(m, L)
-            a = index_map[m_rs]
-            YmL = (√pm)
-            HNk[a, b] += (YnL/YmL) * ωk^d * h
+
+            # Exclude states that don't satisfy the 
+            # commensurability condition: k * p divisible by L,
+            # as these states end up with zero amplitude.
+            if haskey(index_map, m_rs)
+                a = index_map[m_rs]
+                YmL = (√pm)
+                HNk[a, b] += (YnL/YmL) * ωk^d * h |> real
+            end
         end
     end
 
