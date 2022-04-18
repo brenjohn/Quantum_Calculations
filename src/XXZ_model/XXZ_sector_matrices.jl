@@ -55,7 +55,7 @@ with length L.
 function build_matrix_Nk(operator::Function, L, N, k, args...)
     basis = build_basis_Nk(UInt32, L, N, k)
     d = length(basis)
-    HNk = zeros(d, d)
+    HNk = zeros(ComplexF64, d, d)
     index_map = Dict(e => i for (i, (e, p)) in enumerate(basis))
     ωk = cispi(2 * k / L)
 
@@ -70,8 +70,8 @@ function build_matrix_Nk(operator::Function, L, N, k, args...)
             # as these states end up with zero amplitude.
             if haskey(index_map, m_rs)
                 a = index_map[m_rs]
-                YmL = (√pm)
-                HNk[a, b] += (YnL/YmL) * ωk^d * h |> real
+                YmL = √pm
+                HNk[a, b] += (YnL/YmL) * ωk^d * h
             end
         end
     end
