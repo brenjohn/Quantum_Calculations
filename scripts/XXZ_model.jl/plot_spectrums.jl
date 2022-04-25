@@ -6,7 +6,7 @@ include(srcdir("XXZ_model/XXZ_model.jl"))
 
 Δ = 0.5
 λ = 0.0
-L = 12
+L = 8
 
 ###
 ### Create Hamiltonians

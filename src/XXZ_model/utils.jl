@@ -65,6 +65,17 @@ function number_of_aligned_neighbours(n::T, i, L) where T <: Union{UInt64, UInt3
     hamming_weight(aligned)
 end
 
+function number_of_aligned_neighbours2(n::T, i, L, pbc=true) where T <: Union{UInt64, UInt32}
+    N = T === UInt32 ? 32 : 64
+    mask = typemax(T) >> (N - L)
+    pbc || (mask = (mask >> i) << i)
+    # n = n & mask # TODO: can remove this line if we assume n[l] is 0 when l > L
+    m = (n << i) + (n >> (L-i))
+    # pbc && (m += (n >> (L-i)))
+    aligned = ~(n ⊻ m) & mask
+    hamming_weight(aligned)
+end
+
 #TODO: Use Holy traits pattern to "parameterise" all 32, 64 bit types.
 """
     hamming_weight(b)

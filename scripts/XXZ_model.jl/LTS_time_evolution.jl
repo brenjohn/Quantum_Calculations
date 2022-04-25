@@ -61,4 +61,4 @@ lines!(0:ϵ:ϵ*(N_steps-1), Ext_As, label="Exact A")
 lines!(0:ϵ:ϵ*(N_steps-1), Ext_Bs, label="Exact B")
 axislegend(a, position = :rb)
 
-save(joinpath(plotsdir("XXZ"), "LTS_evolution_comparison.png"), f)
+# save(joinpath(plotsdir("XXZ"), "LTS_evolution_comparison.png"), f)

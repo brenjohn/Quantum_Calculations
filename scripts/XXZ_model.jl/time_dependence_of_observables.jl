@@ -63,4 +63,4 @@ for (i, d) in enumerate(eachrow(df))
 end
 axislegend(a, position = :rb)
 
-save(joinpath(plotsdir("XXZ"), "evolution_of_observable_expectation.png"), f)
+# save(joinpath(plotsdir("XXZ"), "evolution_of_observable_expectation.png"), f)

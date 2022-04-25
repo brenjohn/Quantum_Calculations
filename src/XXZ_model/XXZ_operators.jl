@@ -2,67 +2,88 @@
 ### XXZ Hamiltonian with nn and nnn interactions.
 ###
 
-# TODO: Use type parametrisation to generate different hamiltonian functions
-# ie use Δ and λ as types and specialise on those.
-
 # TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
 
-# TODO: use bits_differ function for periodic boundary condition checks.
+# TODO: use singleton types and multiple dispatch to remove the "if J !=0" lines in hopping and interaction terms.
+
 """
 Returns the image of n under the action of the XXZ Hamiltonian.
 """
-function apply_H(n::Unsigned, L, Δ, λ)
-    J1 = 1/(1+λ)
-    J2 = λ/(1+λ)
-    V1 = Δ/(1+λ)
-    V2 = λ*Δ/(1+λ)
-    apply_H(n, L, J1, V1, J2, V2)
-end
+function apply_H(n::T, L;
+                J1 = 1.0, 
+                V1 = 1.0, 
+                J2 = 0.0, 
+                V2 = 0.0,
+                hs = (),
+                is = (), 
+                pbc= true
+                ) where T <: Unsigned
 
-function apply_H(n::Unsigned, L, J1, V1, J2, V2)
+    output = Tuple{T, Float64}[]
 
-    # nn_weight = -1/(1+λ)
-    # nnn_weight = -λ/(1+λ)
+    # Apply nearest and next-nearest neighbour hopping.
+    J1 != 0 && hopping_term!(output, J1, 1, n, L, pbc)
+    J2 != 0 && hopping_term!(output, J2, 2, n, L, pbc)
 
-    n_aligned = number_of_aligned_neighbours(n, 1, L)
-    diag = (-V1/2) * (2*n_aligned - L)
+    # Apply nearest and next-nearest neighbour interaction terms.
+    V1 != 0 && neighbour_interaction_term!(output, V1, 1, n, L, pbc)
+    V2 != 0 && neighbour_interaction_term!(output, V2, 2, n, L, pbc)
 
-    n_aligned = number_of_aligned_neighbours(n, 2, L)
-    diag2 = (-V2/2) * (2*n_aligned - L)
-    diag = diag + diag2
-
-    output = [(n, diag)]
-    for l = 0:L-2
-        if bits_differ(n, l, l+1 )
-            m = flipbits(n, l, l+1)
-            push!(output, (m, J1))
-        end
-    end
-
-    # Periodic boundary condition
-    if (n & 1) ⊻ (n >> (L-1)) != 0
-        m = flipbits(n, 0, L-1)
-        push!(output, (m, J1))
-    end
-
-    for l = 0:L-3
-        if bits_differ(n, l, l+2)
-            m = flipbits(n, l, l+2)
-            push!(output, (m, J2))
-        end
-    end
-
-    # Periodic boundary condition
-    if (n & 1) ⊻ ((n >> (L-2)) & 1) != 0
-        m = flipbits(n, 0, L-2)
-        push!(output, (m, J2))
-    end
-    if (n & 2) ⊻ ((n >> (L-2)) & 2) != 0
-        m = flipbits(n, 1, L-1)
-        push!(output, (m, J2))
+    # Apply sigma-z impurities
+    for (h, i) in zip(hs, is)
+        h != 0 && single_site_impurity!(output, h, i, n)
     end
 
     output
+end
+
+function apply_H(n::Unsigned, L, Δ, λ)
+    J1 = -1/(1+λ)
+    J2 = -λ/(1+λ)
+    V1 = Δ/(1+λ)
+    V2 = λ*Δ/(1+λ)
+    apply_H(n, L; J1=J1, V1=V1, J2=J2, V2=V2)
+end
+
+"""
+Generate the action of `d`-nearest neighbour hopping, with strength `J`, on 
+the state `n` of a system of length `L` and push it to the `output` vector.
+"""
+function hopping_term!(output, J, d, n, L, pbc)
+    for l = 0:L-1-d
+        if bits_differ(n, l, l+d)
+            m = flipbits(n, l, l+d)
+            push!(output, (m, J))
+        end
+    end
+
+    # Periodic boundary condition
+    if pbc
+        for b = 0:d-1
+            if bits_differ(n, b, L-d+b)
+                m = flipbits(n, b, L-d+b)
+                push!(output, (m, J))
+            end
+        end
+    end
+    nothing
+end
+
+"""
+Generate the action of `d`-nearest neighbour interaction, with strength `V`, on 
+the state `n` of a system of length `L` and push it to the `output` vector.
+"""
+function neighbour_interaction_term!(output, V, d, n, L, pbc)
+    n_aligned = number_of_aligned_neighbours2(n, d, L, pbc)
+    diag = (-V/2) * (2*n_aligned - L)
+    push!(output, (n, diag))
+    nothing
+end
+
+function single_site_impurity!(output, h, i, n)
+    ni = (n >> i) & 1
+    s = 2 * ni - 1
+    push!(output, (n, s * h))
 end
 
 
