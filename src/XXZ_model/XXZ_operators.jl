@@ -1,13 +1,40 @@
-###
-### XXZ Hamiltonian with nn and nnn interactions.
-###
+#=
+This file defines operators for the XXZ model.
+
+Here, an operator is defined by a function which returns the image of a given basis state.
+The image of the basis state is stored in an `output` vector holding state-weight tuples.
+=#
+
+#===========================================================================#
+# The XXZ Hamiltonian operator
+#===========================================================================#
 
 # TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
-
 # TODO: use singleton types and multiple dispatch to remove the "if J !=0" lines in hopping and interaction terms.
 
 """
-Returns the image of n under the action of the XXZ Hamiltonian.
+Returns the image of the state `n` under the action of the XXZ Hamiltonian.
+
+ H = J1/2 * ∑ₙₙ (σˣᵢσˣⱼ + σʸᵢσʸⱼ) + V1 * ∑ₙₙ σᶻᵢσᶻⱼ
+   + J2/2 * ∑ₙₙₙ(σˣᵢσˣⱼ + σʸᵢσʸⱼ) + V2 * ∑ₙₙₙσᶻᵢσᶻⱼ
+   + ∑ₛhₛσᶻₛ
+
+   = J1 * ∑ₙₙ (bᵢb⁺ⱼ + b⁺ᵢbⱼ) + V1 * ∑ₙₙ (2nᵢ - 1)(2nⱼ - 1)
+   + J2 * ∑ₙₙₙ(bᵢb⁺ⱼ + b⁺ᵢbⱼ) + V2 * ∑ₙₙₙ(2nᵢ - 1)(2nⱼ - 1)
+   + ∑ₛhₛ(2nₛ - 1)
+
+# arguments
+- `n::Unsigned`: An Unsigned integer representing a computational basis state.
+- `L`: The number of sites in the XXZ chain to be considered (ie the number of bits in `n` to account for.)
+
+# keyword arguments
+- `J1`: The strength of nearest neighbour hopping.
+- `V1`: The strength of nearest neighbour interaction.
+- `J2`: The strength of next nearest neighbour hopping.
+- `V2`: The strength of next nearest neighbour interaction.
+- `hs`: An iterable containing the single site impurity strengths.
+- `is`: An iterable containing the locations of single site impurities.
+- `pbs`: `true` if periodic boundary conditions are to be imposed.
 """
 function apply_H(n::T, L;
                 J1 = 1.0, 
@@ -37,6 +64,9 @@ function apply_H(n::T, L;
     output
 end
 
+"""
+Uses the parameterisation of the XXZ Hamiltonian used in the Jung-Hoon 2020 tutorial.
+"""
 function apply_H(n::Unsigned, L, Δ, λ)
     J1 = -1/(1+λ)
     J2 = -λ/(1+λ)
@@ -51,19 +81,13 @@ the state `n` of a system of length `L` and push it to the `output` vector.
 """
 function hopping_term!(output, J, d, n, L, pbc)
     for l = 0:L-1-d
-        if bits_differ(n, l, l+d)
-            m = flipbits(n, l, l+d)
-            push!(output, (m, J))
-        end
+        apply_K!(output, n, J, l, l+d)
     end
 
     # Periodic boundary condition
     if pbc
         for b = 0:d-1
-            if bits_differ(n, b, L-d+b)
-                m = flipbits(n, b, L-d+b)
-                push!(output, (m, J))
-            end
+            apply_K!(output, n, J, b, L-d+b)
         end
     end
     nothing
@@ -87,12 +111,17 @@ function single_site_impurity!(output, h, i, n)
 end
 
 
-###
-### Zero momentum distribution.
-###
+#===========================================================================#
+# Here, we define the operators A and B as defined in the Jung-Hoon_2020 
+# tutorial. These are:
+#     - A = Zero momentum distribution 
+#     - B = Nearest neigbour interaction energy density
+#===========================================================================#
 
 """
 Returns the image of n under the zero momentum distribution operator.
+
+    A = 1/L ∑ᵢⱼ(σ⁺ᵢσ⁻ⱼ) = 1/L ∑ᵢⱼ(b⁺ᵢbⱼ)
 """
 function apply_A(n::Unsigned, L)
     weight = 1 / L
@@ -110,12 +139,10 @@ function apply_A(n::Unsigned, L)
     output
 end
 
-###
-### Nearest neigbour interaction energy density.
-###
-
 """
 Returns the image of n under the nearest neigbour interaction energy density operator.
+
+    B = 1/4L ∑ₙₙ(σᶻᵢ+1)(σᶻⱼ+1) = 1/L ∑ₙₙnᵢnⱼ
 """
 function apply_B(n::Unsigned, L)
     nn = translate(n, L)
@@ -124,92 +151,62 @@ function apply_B(n::Unsigned, L)
     [(n, weight)]
 end
 
-###
-### Local time evolution operator.
-###
+#===========================================================================#
+# Below we define the operators discussed in Brenes_2020:
+#     - K = local kinetic energy
+#     - T = average kinetic energy
+#     - J = spin current
+#===========================================================================#
 
-function apply_ulm!(a::Vector{<:Complex}, ψ::Vector{<:Complex}, l, m, L, Δ, ϵ)
-    for n in UInt32(0):UInt32(2^L-1)
-        if bits_differ(n, l, m)
-            a[n+1] += ψ[n+1] * cis(-Δ * ϵ / 2) * cos(ϵ)
-            o = flipbits(n, l, m) # here it is assumed l < m
-            a[o+1] += ψ[n+1] * cis(-Δ * ϵ / 2) * sin(ϵ) * 1im
-        else
-            a[n+1] += ψ[n+1] * cis(Δ * ϵ / 2)
+"""
+Returns the image of the basis state `n` under the local kinetic energy operator:
+
+    K = σˣᵢσˣⱼ + σʸᵢσʸⱼ = bᵢb⁺ⱼ + b⁺ᵢbⱼ
+"""
+apply_K(args...) = apply_K!(Tuple{T, Float64}[], args...)
+
+function apply_K!(output, n::T, J, i, j) where T <: Unsigned
+    if bits_differ(n, i, j)
+        m = flipbits(n, i, j)
+        push!(output, (m, J))
+    end
+    output
+end
+
+"""
+Returns the image of the basis state `n` under the average kinetic energy operator:
+
+    T = ∑ₙₙ(σˣᵢσˣⱼ + σʸᵢσʸⱼ) / L = 2/L * ∑ₙₙ(bᵢb⁺ⱼ + b⁺ᵢbⱼ)
+"""
+apply_T(n::T, L, d, pbc=false) where T <: Unsigned = hopping_term!(Tuple{T, Float64}[], 2/L, d, n, L, pbc)
+
+"""
+Returns the image of the basis state `n` under the spin current operator:
+
+    J = ∑ₙₙ(σˣᵢσʸⱼ - σʸᵢσˣⱼ) / L = 2/L * ∑ₙₙ(bᵢb⁺ⱼ - b⁺ᵢbⱼ)
+"""
+function apply_J(n::T, L, d=1, pbc=false) where T <: Unsigned
+    output = Tuple{T, Float64}[]
+    Jp = 2/L; Jm = -2/L
+
+    for l = 0:L-1-d
+        if bits_differ(n, l, l+d)
+            m = flipbits(n, l, l+d)
+            J = m > n ? Jp : Jm # m > n => a 1 has moved to the right. 
+            push!(output, (m, J))
         end
     end
-    a, ψ
-end
 
-function apply_ulm!(a::Vector{<:Complex}, ψ::Vector{<:Complex}, sites::Vector{<:NTuple{2, Integer}}, L, Δ, ϵ)
-    for (l, m) in sites
-        ψ, a = apply_ulm!(a, ψ, l, m, L, Δ, ϵ)
-        for i = 1:length(a) a[i] = 0 end
-    end
-    ψ, a
-end
-
-"""
-L is assumed to be even,
-"""
-function LTS_evolution(ψ0, L, Δ, λ, ϵ, N_steps)
-    if λ == 0
-        return _LTS_evolution_nn_interactions(ψ0, L, Δ, ϵ, N_steps)
-    elseif L % 4 == 0
-        return _LTS_evolution_nnn_interactions(ψ0, L, Δ, λ, ϵ, N_steps)
-    else
-        error("nnn LTS evolution is only supported when L is a multiple of 4.")
-    end
-end
-
-function _LTS_evolution_nn_interactions(ψ0::Vector{T}, L, Δ, ϵ, N_steps) where T <: Complex
-    ψt = zeros(T, length(ψ0), N_steps)
-    ψt[:, 1] = ψ0
-    ψ = copy(ψ0)
-    a = zeros(T, length(ψ))
-
-    h0_sites = [(2l    , 2l + 1) for l = 0:(L÷2)-1]
-    h1_sites = [(2l + 1, 2l + 2) for l = 0:(L÷2)-1]; h1_sites[end] = (0, L-1)
-
-    for ti in 1:N_steps-1
-        ψ, a = XXZ.apply_ulm!(a, ψ, h0_sites, L, Δ, ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h1_sites, L, Δ, ϵ)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h0_sites, L, Δ, ϵ/2)
-        ψt[:, ti+1] = ψ[:]
+    # Periodic boundary conditions
+    if pbc
+        for b = 0:d-1
+            if bits_differ(n, b, L-d+b)
+                m = flipbits(n, b, L-d+b)
+                J = m < n ? Jp : Jm # m < n => a 1 has moved to the right across the boundary.
+                push!(output, (m, J))
+            end
+        end
     end
 
-    ψt
-end
-
-function _LTS_evolution_nnn_interactions(ψ0::Vector{T}, L, Δ, λ, ϵ, N_steps) where T <: Complex
-    ψt = zeros(T, length(ψ0), N_steps)
-    ψt[:, 1] = ψ0
-    ψ = ψ0
-    a = zeros(T, length(ψ))
-
-    nn_weight  = 1/(1+λ)
-    nnn_weight = λ/(1+λ)
-
-    h0_sites = [(2l    , 2l + 1) for l = 0:(L÷2)-1]
-    h1_sites = [(2l + 1, 2l + 2) for l = 0:(L÷2)-1]; h1_sites[end] = (0, L-1)
-
-    h2_sites = [(4l    , 4l + 2) for l = 0:(L÷4)-1]
-    h2_sites = vcat(h2_sites, [(4l + 1, 4l + 3) for l = 0:(L÷4)-1])
-
-    h3_sites = [(4l + 2, 4l + 4) for l = 0:(L÷4)-1]; h3_sites[end] = (0, L-2)
-    h3_sites = vcat(h3_sites, [(4l + 3, 4l + 5) for l = 0:(L÷4)-1]); h3_sites[end] = (1, L-1)
-
-    for ti in 1:N_steps-1
-        ψ, a = XXZ.apply_ulm!(a, ψ, h0_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h1_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h2_sites, L, Δ, nnn_weight * ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h3_sites, L, Δ, nnn_weight * ϵ)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h2_sites, L, Δ, nnn_weight * ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h1_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = XXZ.apply_ulm!(a, ψ, h0_sites, L, Δ, nn_weight * ϵ/2)
-
-        ψt[:, ti+1] = ψ[:]
-    end
-
-    ψt
+    output
 end

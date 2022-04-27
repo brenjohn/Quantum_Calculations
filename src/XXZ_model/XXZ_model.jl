@@ -15,5 +15,9 @@ include("utils.jl")
 include("XXZ_basis.jl")
 include("XXZ_operators.jl")
 include("XXZ_sector_matrices.jl")
+include("XXZ_time_evolution.jl")
+
+# TODO: The following should be separated into a separate module once it's big enough
+include("analysis_tools.jl")
 
 end

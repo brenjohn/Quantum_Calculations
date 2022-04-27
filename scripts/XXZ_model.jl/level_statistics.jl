@@ -3,45 +3,32 @@ using LinearAlgebra
 using GLMakie, Makie
 using DataFrames
 using StatsBase
-using LsqFit
 using Printf
 
 include(srcdir("XXZ_model/XXZ_model.jl"))
 
 #=
+This script computes the level statistics for the XXZ chain as next-nearest neighbour hopping
+and interaction are gradually turned on. The Hamiltonian is H = (Hnn + λ * Hnnn) / (1 + λ).
 
+The model is integrable when nnn terms are not present and non-integrable when they are. Thus 
+the level statistics should change from Poisson to Wigner-Dyson as these terms are turned on.
 =#
 
-Δ = 1.0
-L = 20
-N = L ÷ 3
+# Set model parameters
+Δ = 1.0; L = 20; N = L ÷ 3
 
+# Set variables for collecting results.
 h = XXZ.apply_H
-
-function unfold_spectrum(spectrum)
-    staircase(E) = sum(En -> En <= E, spectrum)
-    domain = range(start = spectrum[1], stop = spectrum[end], length=2*length(spectrum))
-    # domain = [spectrum[i] for i in [[1:5:length(spectrum)...]; 273]]
-    image = staircase.(domain)
-
-    model(x, params) = sum(i -> x.^(i-1) .* params[i], 1:length(params))
-    params = zeros(15)
-    best_fit = curve_fit(model, domain, image, params)
-    unfolded_spectrum = model(spectrum, coef(best_fit))
-
-    unfolded_spectrum
-end
-
-bins_unfolded = 0.0:0.1:4.0
-centres_unfolded = (bins_unfolded[1:end-1] .+ bins_unfolded[2:end]) ./ 2
-
-df_λ = DataFrame(
-    λ = Float64[],
-    df_k = DataFrame[],
-    avrg_weigths = Vector{Float64}[]
-    )
-
+bins = 0.0:0.1:4.0
 λ_range = 0.0:0.001:0.2
+df_λ = DataFrame(
+                λ = Float64[],
+                df_k = DataFrame[],
+                avrg_weigths = Vector{Float64}[]
+                )
+
+# Collect results for various values of λ.
 for λ = λ_range
     df_k = DataFrame(
                 k = Int[],
@@ -58,10 +45,10 @@ for λ = λ_range
 
         @info " Unfolding spectrum"
         cutoff = floor(Int64, length(spec) * 0.1)
-        unfolded_spec = unfold_spectrum(spec)
+        unfolded_spec = XXZ.unfold_spectrum(spec)
         level_spacings = unfolded_spec[2:end] .- unfolded_spec[1:end-1]
         level_spacings = level_spacings[cutoff:end-cutoff]
-        hist = fit(Histogram, level_spacings, bins_unfolded)
+        hist = fit(Histogram, level_spacings, bins)
 
         push!(df_k, (k, unfolded_spec, level_spacings, hist))
     end
@@ -96,7 +83,8 @@ framerate = 30
 
 f = Figure(fontsize=35, resolution=(1400, 1400))
 a = Axis(f[1, 1], xlabel="s", ylabel="P(s)", title=title)
-barplot!(centres_unfolded, weights)
+centres = (bins[1:end-1] .+ bins[2:end]) ./ 2
+barplot!(centres, weights)
 text!(label, position=(3, 0.08), textsize=40)
 ylims!(a, 0, 0.1)
 

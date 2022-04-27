@@ -108,7 +108,7 @@ function hamming_weight(b::T) where T <: Union{UInt64, UInt32}
     end
 end
 
-# Below implementation should run faster on CPUs with better multiplcation units.
+# The below implementation should run faster on CPUs with better multiplcation units.
 # function hamming_weight2(b::T) where T <: Union{UInt64, UInt32}
 #     if T === UInt32       # Binary representation:
 #         h01 = 0x01010101  # 0000000100000001....
