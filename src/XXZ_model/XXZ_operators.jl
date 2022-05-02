@@ -11,6 +11,7 @@ The image of the basis state is stored in an `output` vector holding state-weigh
 
 # TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
 # TODO: use singleton types and multiple dispatch to remove the "if J !=0" lines in hopping and interaction terms.
+# TODO: rename number_of_aligned_neighbours2 as number_of_aligned_neighbours
 
 """
 Returns the image of the state `n` under the action of the XXZ Hamiltonian.
@@ -70,8 +71,8 @@ Uses the parameterisation of the XXZ Hamiltonian used in the Jung-Hoon 2020 tuto
 function apply_H(n::Unsigned, L, Δ, λ)
     J1 = -1/(1+λ)
     J2 = -λ/(1+λ)
-    V1 = Δ/(1+λ)
-    V2 = λ*Δ/(1+λ)
+    V1 = -0.5*Δ/(1+λ)
+    V2 = -0.5*λ*Δ/(1+λ)
     apply_H(n, L; J1=J1, V1=V1, J2=J2, V2=V2)
 end
 
@@ -90,7 +91,7 @@ function hopping_term!(output, J, d, n, L, pbc)
             apply_K!(output, n, J, b, L-d+b)
         end
     end
-    nothing
+    output
 end
 
 """
@@ -98,11 +99,14 @@ Generate the action of `d`-nearest neighbour interaction, with strength `V`, on
 the state `n` of a system of length `L` and push it to the `output` vector.
 """
 function neighbour_interaction_term!(output, V, d, n, L, pbc)
-    n_aligned = number_of_aligned_neighbours2(n, d, L, pbc)
-    diag = (-V/2) * (2*n_aligned - L)
+    n_aligned = number_of_aligned_neighbours(n, d, L, pbc)
+    n_neighbours = pbc ? L : L - d
+    diag = V * (2*n_aligned - n_neighbours)
     push!(output, (n, diag))
-    nothing
+    output
 end
+
+appy_site_impurity(n::T, L, h, i) where T <: Unsigned = single_site_impurity!(Tuple{T, Float64}[], h, i, n)
 
 function single_site_impurity!(output, h, i, n)
     ni = (n >> i) & 1
@@ -161,9 +165,9 @@ end
 """
 Returns the image of the basis state `n` under the local kinetic energy operator:
 
-    K = σˣᵢσˣⱼ + σʸᵢσʸⱼ = bᵢb⁺ⱼ + b⁺ᵢbⱼ
+    K = J/2 * (σˣᵢσˣⱼ + σʸᵢσʸⱼ) = J * (bᵢb⁺ⱼ + b⁺ᵢbⱼ)
 """
-apply_K(args...) = apply_K!(Tuple{T, Float64}[], args...)
+apply_K(n::T, L, args...) where T <: Unsigned = apply_K!(Tuple{T, Float64}[], n, args...)
 
 function apply_K!(output, n::T, J, i, j) where T <: Unsigned
     if bits_differ(n, i, j)
@@ -183,11 +187,11 @@ apply_T(n::T, L, d, pbc=false) where T <: Unsigned = hopping_term!(Tuple{T, Floa
 """
 Returns the image of the basis state `n` under the spin current operator:
 
-    J = ∑ₙₙ(σˣᵢσʸⱼ - σʸᵢσˣⱼ) / L = 2/L * ∑ₙₙ(bᵢb⁺ⱼ - b⁺ᵢbⱼ)
+    J = ∑ₙₙ(σˣᵢσʸⱼ - σʸᵢσˣⱼ) / L = 2i/L * ∑ₙₙ(bᵢb⁺ⱼ - b⁺ᵢbⱼ)
 """
 function apply_J(n::T, L, d=1, pbc=false) where T <: Unsigned
-    output = Tuple{T, Float64}[]
-    Jp = 2/L; Jm = -2/L
+    output = Tuple{T, ComplexF64}[]
+    Jp = 2im/L; Jm = -2im/L
 
     for l = 0:L-1-d
         if bits_differ(n, l, l+d)

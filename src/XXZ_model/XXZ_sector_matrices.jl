@@ -9,7 +9,7 @@ for the XXZ model of length L.
 """
 function build_matrix(operator::Function, L, args...; kwargs...)
     d = 2^L
-    H = zeros(d, d)
+    H = zeros(ComplexF64, d, d)
 
     for b in UInt32(0):UInt32(2^L-1)
         output = operator(b, L, args...; kwargs...)
@@ -32,7 +32,7 @@ the N-particle sector of the XXZ model of length L.
 function build_matrix_N(operator::Function, L, N, args...; kwargs...)
     basis = build_basis_N(UInt32, L, N)
     d = length(basis)
-    HN = zeros(d, d)
+    HN = zeros(ComplexF64, d, d)
 
     index_map = Dict(basis .=> 1:d)
 
@@ -97,7 +97,7 @@ of the model.
 function build_matrix_MSS(operator::Function, L, args...; kwargs...)
     basis = build_MSS_basis(L)
     d = length(basis)
-    M = zeros(d, d)
+    M = zeros(ComplexF64, d, d)
     index_map = Dict(e => i for (i, (e, qp)) in enumerate(basis))
 
     for (b, (n, qpn)) in enumerate(basis)
