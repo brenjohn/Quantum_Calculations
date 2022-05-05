@@ -1,3 +1,7 @@
+#=
+This script 
+=#
+
 using DrWatson
 using LinearAlgebra
 using DataFrames
@@ -5,6 +9,17 @@ using GLMakie, Makie
 
 include(srcdir("XXZ_model/XXZ_model.jl"))
 
+#===============================================================#
+# Utility functions for the simulation.
+#===============================================================#
+
+"""
+Evolves the initial state `ψᵢ` over the time range `t_range` according to the
+factorised hamiltonian `F`. 
+
+Returns, the expectation value of each operator in the iterable `Os` for each 
+time step.
+"""
 function time_evolve(Os, F, t_range, ψᵢ)
     Ct = zeros(ComplexF64, length(ψᵢ), length(t_range) + 1)
     Ct[:, 1] = F.vectors' * ψᵢ
@@ -24,39 +39,61 @@ function time_evolve(Os, F, t_range, ψᵢ)
     O_avrg
 end
 
-#==============#
+function diagonal_ensemble_average(O, ψ, F)
+    Ō = 0.0
+    O = F.vectors' * O * F.vectors
+    ψ = F.vectors' * ψ
 
+    for n in 1:length(eachcol(F.vectors))
+        Ō += abs(ψ[n])^2 * O[n, n]
+    end
+
+    Ō
+end
+
+
+
+#===============================================================#
+# Perform the simulation and gather results.
+#===============================================================#
+
+# Set up system parameters.
 J1 = 2.0; V1 = 0.55
 pbc = false
 L = 14; N = L ÷ 2
 hs = (1.0,); is = (L÷2,)
 
+# Compute Hamiltonians with ad without the impurity.
 H_xxz = XXZ.build_matrix_N(XXZ.apply_H, L, N; J1=J1, V1=V1, pbc=pbc)
 F_xxz = Hermitian(H_xxz) |> eigen
 
 H_si = XXZ.build_matrix_N(XXZ.apply_H, L, N; J1=J1, V1=V1, hs=hs, is=is, pbc=pbc)
 F_si = Hermitian(H_si) |> eigen
 
+# Create the initial state to time evolve.
 basis = XXZ.build_basis_N(UInt32, L, N)
 basis_index = Dict(basis .=> 1:length(basis))
 neel_state = 0x55555555 >> (32 - L)
 ψᵢ = zeros(ComplexF64, length(basis))
 ψᵢ[basis_index[neel_state]] = 1.0 + 0.0im
 
+# Create operator matrices to compute expectation values for.
 i = L ÷ 4
 K = XXZ.build_matrix_N(XXZ.apply_K, L, N, 1.0, i, i+1)
 T = XXZ.build_matrix_N(XXZ.apply_T, L, N, 1, pbc)
 SI = XXZ.build_matrix_N(XXZ.appy_site_impurity, L, N, 1.0, i)
 J = XXZ.build_matrix_N(XXZ.apply_J, L, N, 1, pbc)
 
-
-dt = 0.5
-t_range = dt:dt:200
-
+# Time evolve the initial state.
+dt = 0.5; t_range = dt:dt:200
 Ot_xxz = time_evolve([K, T, SI, J], F_xxz, t_range, ψᵢ)
 Ot_si = time_evolve([K, T, SI, J], F_si, t_range, ψᵢ)
 
-#=========#
+
+
+#===============================================================#
+# Plot the results.
+#===============================================================#
 
 f = Figure(resolution=(2000, 1400), fontsize=35)
 
@@ -78,4 +115,4 @@ lines!(a, [0.0; t_range], Ot_si[4, :] |> real, label="SI", linewidth=3)
 
 axislegend(a, position = :rt)
 
-save(joinpath(plotsdir("XXZ"), "evolution_of_observables_with_single_site_impurity.png"), f)
+# save(joinpath(plotsdir("XXZ"), "evolution_of_observables_with_single_site_impurity.png"), f)

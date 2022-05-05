@@ -11,7 +11,6 @@ The image of the basis state is stored in an `output` vector holding state-weigh
 
 # TODO: preallocate output vector and reuse it: apply_H!(output, n, L)
 # TODO: use singleton types and multiple dispatch to remove the "if J !=0" lines in hopping and interaction terms.
-# TODO: rename number_of_aligned_neighbours2 as number_of_aligned_neighbours
 
 """
 Returns the image of the state `n` under the action of the XXZ Hamiltonian.
