@@ -32,8 +32,8 @@ function next_basis_element(e::T)::T where T <: Union{UInt32, UInt64}
 end
 
 """
-Returns a vector of particle-basis elements for the XXZ model of length L 
-with N particles.
+Returns a vector of particle-basis elements for the XXZ model of length `L` 
+with `N` particles.
 """
 function build_basis_N(T::K, L::Integer, N::Integer) where K <: DataType
     cardinality = binomial(L, N)

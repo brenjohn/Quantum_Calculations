@@ -177,7 +177,7 @@ function apply_K!(output, n::T, J, i, j) where T <: Unsigned
 end
 
 """
-Returns the image of the basis state `n` under the average kinetic energy operator:
+Returns the image of the basis state `n` under the `d`-nn average kinetic energy operator:
 
     T = ∑ₙₙ(σˣᵢσˣⱼ + σʸᵢσʸⱼ) / L = 2/L * ∑ₙₙ(bᵢb⁺ⱼ + b⁺ᵢbⱼ)
 """

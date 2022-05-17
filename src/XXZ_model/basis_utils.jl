@@ -5,6 +5,14 @@ using LinearAlgebra: svd
 #=============================================================#
 
 """
+Return a number whose first two bits encode the occupation numbers of 
+sites `i` and `j`. (Assumes i < j)
+"""
+function get_occupations(n::Unsigned, i, j)
+    ((n & (1 << i)) >> i) + ((n & (1 << j)) >> (j-1))
+end 
+
+"""
 Return if the i-th and j-th bit of n are different. (Assumes i < j)
 """
 function bits_differ(n::Unsigned, i, j)
@@ -119,32 +127,3 @@ end
 #     d = T === UInt32 ? 24 : 56
 #     return (b * h01) >> d
 # end
-
-#=============================================================#
-# Utility functions for computing entanglement entropy        #
-#=============================================================#
-
-"""
-Transform a state from the MSS basis to the full basis.
-"""
-function MSS_to_full_state(ψ, L, basis)
-    state = zeros(ComplexF64, 2^L)
-    for (amp, (basis_vector, pq)) in zip(ψ, basis)
-        full_basis_vectors = XXZ.MSS_to_full_basis(basis_vector, L)
-        for n in full_basis_vectors
-            state[n+1] += amp * sqrt(pq) / (4*L)
-        end
-    end
-    state
-end
-
-"""
-Compute the entanglement entropy for the first L1 sites of the given state.
-"""
-function entanglement_entropy(ψ, L, L1)
-    D1 = 2^L1; D2 = 2^(L-L1)
-    ψ = reshape(ψ, (D1, D2))
-    F = svd(ψ)
-    λs = F.S .^ 2
-    -sum(x -> x != 0 ? x * log(x) : 0.0, λs)
-end
