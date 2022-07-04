@@ -24,7 +24,7 @@ end
 
 
 #===============================================================#
-# Lie-Trotter-Suzuki time evolution.
+# Simple Lie-Trotter-Suzuki time evolution.
 #===============================================================#
 
 function apply_ulm!(a::Vector{<:Complex}, ψ::Vector{<:Complex}, l, m, L, Δ, ϵ)
@@ -117,14 +117,13 @@ end
 
 
 
-
-
-
-####################################################################
+#===============================================================#
+# Lie-Trotter-Suzuki time evolution.
+#===============================================================#
 
 """
 """
-function LTS_evolution(O, O_args, ψ0::Vector{T}, basis::Vector{U}, L, ϵ, num_steps; 
+function LTS_evolution!(f, results, ψ0::Vector{T}, basis::Vector{U}, L, ϵ, num_steps; 
                     J1 = 1.0, 
                     V1 = 1.0, 
                     J2 = 0.0, 
@@ -134,22 +133,26 @@ function LTS_evolution(O, O_args, ψ0::Vector{T}, basis::Vector{U}, L, ϵ, num_s
                     pbc= true) where T <: Complex where U <: Unsigned
     x = Dict{U, T}(basis .=> ψ0)
     y = Dict{U, T}(basis .=> zero(T))
-    results = zeros(T, num_steps + 1)
 
     trotter_steps = get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt=T)
 
     for ti in 1:num_steps
         for trotter_step in trotter_steps
-            x, y = apply_ulm!(y, x, basis, trotter_step)
+            x, y = apply_trotter_step!(y, x, basis, trotter_step)
         end
-
-        # TODO: record result
-        results[ti + 1] = expectation_value(O, O_args, L, x)
+        f(results, x, ti)
     end
-    # return results
+
     results
 end
 
+###
+### LTS setup functions
+###
+
+"""
+Returns an array of tuples, each containing the parameters for a trotter step.
+"""
 function get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt::DataType=ComplexF64)
     hs = Dict(is .=> hs); h0 = Dict()
     if isodd(L)
@@ -160,7 +163,7 @@ function get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt::DataType=Complex
         ho = h0
     end
 
-    trotter_steps = []
+    trotter_steps = Vector{Tuple{Int64, Int64, NTuple{5, elt}}}[]
     if J2 == 0 && V2 == 0
         push!(trotter_steps, [ulm_elements(elt, ϵ/2, J1, V1, he, sites...) for sites in trotter_sites(0, 1, L, pbc)])
         push!(trotter_steps, [ulm_elements(elt, ϵ  , J1, V1, ho, sites...) for sites in trotter_sites(1, 1, L, pbc)])
@@ -209,13 +212,24 @@ function ulm_elements(::Type{T}, ϵ, J, V, hs, l, m) where T <: Complex
     (l, m, convert.(T, (a, b, c, d, e)))
 end
 
-function apply_ulm!(y::Dict{U, T}, x::Dict{U, T}, basis, sites) where U <: Unsigned where T <: Complex
-    for (l, m, ps) in sites
+###
+### LTS step update functions
+###
+
+"""
+Apply the full trotter step update to the state `x` and write the result to `y`.
+"""
+function apply_trooter_step!(y::Dict{U, T}, x::Dict{U, T}, basis::Vector{U}, steo::Vector{Tuple{Int64, Int64, NTuple{5, T}}}) where U <: Unsigned where T <: Complex
+    for (l, m, ps) in step
         x, y = apply_ulm!(y, x, basis, l, m, ps)
         y.vals .= zero(T) # TODO: This is a bit hacky, but avoids computing hashes.
     end
     x, y
 end
+
+###
+### local evolution update functions
+###
 
 """
     apply_ulm!(y::Vector{T}, x::Vector{T}, l, m, ps::NTuple{4, T}) where T <: Complex
@@ -232,23 +246,54 @@ acting on sites l and m with ps = (a, b, c, d, e).
 function apply_ulm!(y::Dict{U, T}, x::Dict{U, T}, 
                     basis::Vector{U}, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
     for n in basis
-        V = get_occupations(n, l, m) |> Val
-        ulm_update!(V, y, n, x[n], l, m, ps)
+        V = get_occupations(n, l, m)
+        if V == 0
+            ulm_update!(Val{0}(), y, n, x[n], l, m, ps)
+        elseif V == 1
+            ulm_update!(Val{1}(), y, n, x[n], l, m, ps)
+        elseif V == 2
+            ulm_update!(Val{2}(), y, n, x[n], l, m, ps)
+        elseif V == 3
+            ulm_update!(Val{3}(), y, n, x[n], l, m, ps)
+        end
     end
     y, x
 end
 
-ulm_update!(::Val{0}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex = y[n] += x * ps[1]
-ulm_update!(::Val{3}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex = y[n] += x * ps[4]
+function ulm_update!(::Val{0}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
+    y[n] += x * ps[1]
+    nothing 
+end
 
-function ulm_update!(::Val{1}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
+function ulm_update!(::Val{3}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
+    y[n] += x * ps[4]
+    nothing 
+end
+
+function ulm_update!(::Val{1}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
     y[n] += x * ps[2]
     o = flipbits(n, l, m) # here it is assumed l < m
     y[o] += x * ps[5]
+    nothing
 end
 
-function ulm_update!(::Val{2}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
+function ulm_update!(::Val{2}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
     y[n] += x * ps[3]
     o = flipbits(n, l, m) # here it is assumed l < m
     y[o] += x * ps[5]
+    nothing
+end
+
+###
+### Record expectation value
+###
+
+function get_expectation_value!(results, op, x, ti, args...; kwargs...)
+    val = 0
+    for (n, amp) in x
+        for (m, weight) in op(n, args...; kwargs...)
+            val += x[n]' * weight * amp
+        end
+    end
+    results[ti] = val
 end
