@@ -136,15 +136,44 @@ function LTS_evolution!(f, results, ψ0::Vector{T}, basis::Vector{U}, L, ϵ, num
 
     trotter_steps = get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt=T)
 
+    chnl = Channel{Tuple{UInt32, ComplexF64}}(3000)
+    num_updates = get_num_local_updates(basis)
+
     for ti in 1:num_steps
         for trotter_step in trotter_steps
-            x, y = apply_trotter_step!(y, x, basis, trotter_step)
+            x, y = apply_trotter_step!(chnl, num_updates, y, x, basis, trotter_step)
         end
         f(results, x, ti)
     end
 
     results
 end
+
+"""
+Apply the full trotter step update to the state `x` and write the result to `y`.
+"""
+function apply_trotter_step!(chnl::Channel{Tuple{U, T}}, num_updates::Int64, y::Dict{U, T}, x::Dict{U, T}, basis::Vector{U}, step::Vector{Tuple{Int64, Int64, NTuple{5, T}}}) where U <: Unsigned where T <: Complex
+    for (l, m, ps) in step
+        x, y = apply_ulm!(chnl, num_updates, y, x, basis, l, m, ps)
+        y.vals .= zero(T) # TODO: This is a bit hacky, but avoids computing hashes.
+    end
+    x, y
+end
+
+function get_num_local_updates(basis)
+    num = 0
+    for n in basis
+        v = get_occupations(n, 1, 2)
+        if v in (1, 3)
+            num += 1
+        else
+            num += 2
+        end
+    end
+    num
+end
+
+
 
 ###
 ### LTS setup functions
@@ -212,20 +241,6 @@ function ulm_elements(::Type{T}, ϵ, J, V, hs, l, m) where T <: Complex
     (l, m, convert.(T, (a, b, c, d, e)))
 end
 
-###
-### LTS step update functions
-###
-
-"""
-Apply the full trotter step update to the state `x` and write the result to `y`.
-"""
-function apply_trooter_step!(y::Dict{U, T}, x::Dict{U, T}, basis::Vector{U}, steo::Vector{Tuple{Int64, Int64, NTuple{5, T}}}) where U <: Unsigned where T <: Complex
-    for (l, m, ps) in step
-        x, y = apply_ulm!(y, x, basis, l, m, ps)
-        y.vals .= zero(T) # TODO: This is a bit hacky, but avoids computing hashes.
-    end
-    x, y
-end
 
 ###
 ### local evolution update functions
@@ -243,46 +258,59 @@ Writes to `y` the image of state `x` under the two site operator uₗₘ, define
 
 acting on sites l and m with ps = (a, b, c, d, e).
 """
-function apply_ulm!(y::Dict{U, T}, x::Dict{U, T}, 
+function apply_ulm!(chnl::Channel{Tuple{U, T}}, num_updates::Int64, y::Dict{U, T}, x::Dict{U, T}, 
                     basis::Vector{U}, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    for n in basis
-        V = get_occupations(n, l, m)
-        if V == 0
-            ulm_update!(Val{0}(), y, n, x[n], l, m, ps)
-        elseif V == 1
-            ulm_update!(Val{1}(), y, n, x[n], l, m, ps)
-        elseif V == 2
-            ulm_update!(Val{2}(), y, n, x[n], l, m, ps)
-        elseif V == 3
-            ulm_update!(Val{3}(), y, n, x[n], l, m, ps)
-        end
+    for tid in 1:Threads.nthreads() 
+        start_task(tid, chnl, basis, x, l, m, ps) 
     end
+    
+    for _ in 1:num_updates
+        (k, v) = take!(chnl)
+        y[k] += v
+    end
+
     y, x
 end
 
-function ulm_update!(::Val{0}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
-    y[n] += x * ps[1]
-    nothing 
+function start_task(tid::Int64, chnl::Channel{Tuple{U, T}}, basis::Vector{U}, x, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
+    @async begin
+        for ni in tid:Threads.nthreads():length(basis)
+            n = basis[ni]
+            V = get_occupations(n, l, m)
+            if V == 0
+                updates = ulm_update(Val{0}(), n, x[n], l, m, ps)
+            elseif V == 1
+                updates = ulm_update(Val{1}(), n, x[n], l, m, ps)
+            elseif V == 2
+                updates = ulm_update(Val{2}(), n, x[n], l, m, ps)
+            else
+                updates = ulm_update(Val{3}(), n, x[n], l, m, ps)
+            end
+
+            for u in updates put!(chnl, u) end
+        end
+    end
 end
 
-function ulm_update!(::Val{3}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
-    y[n] += x * ps[4]
-    nothing 
+function ulm_update(::Val{0}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
+    ((n, x * ps[1]),)
 end
 
-function ulm_update!(::Val{1}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
-    y[n] += x * ps[2]
+function ulm_update(::Val{3}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
+    ((n, x * ps[4]),)
+end
+
+function ulm_update(::Val{1}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
     o = flipbits(n, l, m) # here it is assumed l < m
-    y[o] += x * ps[5]
-    nothing
+    ((n, x * ps[2]), (o, x * ps[5]))
 end
 
-function ulm_update!(::Val{2}, y::Dict{U, T}, n::U, x::T, l, m, ps::NTuple{5, T})::Nothing where U <: Unsigned where T <: Complex
-    y[n] += x * ps[3]
+function ulm_update(::Val{2}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
     o = flipbits(n, l, m) # here it is assumed l < m
-    y[o] += x * ps[5]
-    nothing
+    ((n, x * ps[3]), (o, x * ps[5]))
 end
+
+
 
 ###
 ### Record expectation value
