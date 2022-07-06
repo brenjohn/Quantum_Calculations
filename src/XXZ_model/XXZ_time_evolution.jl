@@ -4,6 +4,8 @@ using LinearAlgebra
 # Exact time evolution.
 #===============================================================#
 
+LocalUpdate{T} = Tuple{Int64, Int64, NTuple{5, T}}
+
 """
 Evolves the initial state `ψᵢ` over the time range `t_range` according to the
 factorised hamiltonian `F`.
@@ -27,160 +29,75 @@ end
 # Simple Lie-Trotter-Suzuki time evolution.
 #===============================================================#
 
-function apply_ulm!(a::Vector{<:Complex}, ψ::Vector{<:Complex}, l, m, L, Δ, ϵ)
-    for n in UInt32(0):UInt32(2^L-1)
+function apply_ulm!(y::Vector{T}, x::Vector{T}, basis::Vector{U}, l, m, ps) where U <: Unsigned where T <: Complex
+    # Diagonal terms
+    Threads.@threads for n in basis
+        @inbounds xn = x[n+1]
+        v = get_occupations(n, l, m)
+        @inbounds y[n+1] += xn * ps[v+1]
+    end
+
+    # Off-diagonal terms
+    Threads.@threads for n in basis
         if bits_differ(n, l, m)
-            a[n+1] += ψ[n+1] * cis(-Δ * ϵ / 2) * cos(ϵ)
-            o = flipbits(n, l, m) # here it is assumed l < m
-            a[o+1] += ψ[n+1] * cis(-Δ * ϵ / 2) * sin(ϵ) * 1im
-        else
-            a[n+1] += ψ[n+1] * cis(Δ * ϵ / 2)
+            @inbounds xn = x[n+1]
+            o = flipbits(n, l, m)
+            @inbounds y[o+1] += xn * ps[5]
         end
     end
-    a, ψ
+
+    y, x
 end
 
-function apply_ulm!(a::Vector{<:Complex}, ψ::Vector{<:Complex}, sites::Vector{<:NTuple{2, Integer}}, L, Δ, ϵ)
-    for (l, m) in sites
-        ψ, a = apply_ulm!(a, ψ, l, m, L, Δ, ϵ)
-        for i = 1:length(a) a[i] = 0 end
+function apply_trotter_step!(y::Vector{T}, x::Vector{T}, basis::Vector{U},
+                            trotter_step::Vector{LocalUpdate{T}}) where U <: Unsigned where T <: Complex
+    for step in trotter_step
+        x, y = apply_ulm!(y, x, basis, step...)
+        y .= zero(T)
     end
-    ψ, a
+    x, y
 end
 
-"""
-Lie-Trotter-Suzuki time evolution.
-
-L is assumed to be even,
-"""
-function LTS_evolution(ψ0, L, Δ, λ, ϵ, N_steps)
-    if λ == 0
-        return _LTS_evolution_nn_interactions(ψ0, L, Δ, ϵ, N_steps)
-    elseif L % 4 == 0
-        return _LTS_evolution_nnn_interactions(ψ0, L, Δ, λ, ϵ, N_steps)
-    else
-        error("nnn LTS evolution is only supported when L is a multiple of 4.")
-    end
-end
-
-function _LTS_evolution_nn_interactions(ψ0::Vector{T}, L, Δ, ϵ, N_steps) where T <: Complex
-    ψt = zeros(T, length(ψ0), N_steps)
-    ψt[:, 1] = ψ0
-    ψ = copy(ψ0)
-    a = zeros(T, length(ψ))
-
-    h0_sites = [(2l    , 2l + 1) for l = 0:(L÷2)-1]
-    h1_sites = [(2l + 1, 2l + 2) for l = 0:(L÷2)-1]; h1_sites[end] = (0, L-1)
-
-    for ti in 1:N_steps-1
-        ψ, a = apply_ulm!(a, ψ, h0_sites, L, Δ, ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h1_sites, L, Δ, ϵ)
-        ψ, a = apply_ulm!(a, ψ, h0_sites, L, Δ, ϵ/2)
-        ψt[:, ti+1] = ψ[:]
-    end
-
-    ψt
-end
-
-function _LTS_evolution_nnn_interactions(ψ0::Vector{T}, L, Δ, λ, ϵ, N_steps) where T <: Complex
-    ψt = zeros(T, length(ψ0), N_steps)
-    ψt[:, 1] = ψ0
-    ψ = ψ0
-    a = zeros(T, length(ψ))
-
-    nn_weight  = 1/(1+λ)
-    nnn_weight = λ/(1+λ)
-
-    h0_sites = [(2l    , 2l + 1) for l = 0:(L÷2)-1]
-    h1_sites = [(2l + 1, 2l + 2) for l = 0:(L÷2)-1]; h1_sites[end] = (0, L-1)
-
-    h2_sites = [(4l    , 4l + 2) for l = 0:(L÷4)-1]
-    h2_sites = vcat(h2_sites, [(4l + 1, 4l + 3) for l = 0:(L÷4)-1])
-
-    h3_sites = [(4l + 2, 4l + 4) for l = 0:(L÷4)-1]; h3_sites[end] = (0, L-2)
-    h3_sites = vcat(h3_sites, [(4l + 3, 4l + 5) for l = 0:(L÷4)-1]); h3_sites[end] = (1, L-1)
-
-    for ti in 1:N_steps-1
-        ψ, a = apply_ulm!(a, ψ, h0_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h1_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h2_sites, L, Δ, nnn_weight * ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h3_sites, L, Δ, nnn_weight * ϵ)
-        ψ, a = apply_ulm!(a, ψ, h2_sites, L, Δ, nnn_weight * ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h1_sites, L, Δ, nn_weight * ϵ/2)
-        ψ, a = apply_ulm!(a, ψ, h0_sites, L, Δ, nn_weight * ϵ/2)
-
-        ψt[:, ti+1] = ψ[:]
-    end
-
-    ψt
-end
-
-
-
-#===============================================================#
-# Lie-Trotter-Suzuki time evolution.
-#===============================================================#
-
-"""
-"""
-function LTS_evolution!(f, results, ψ0::Vector{T}, basis::Vector{U}, L, ϵ, num_steps; 
-                    J1 = 1.0, 
-                    V1 = 1.0, 
-                    J2 = 0.0, 
-                    V2 = 0.0,
-                    hs = (),
-                    is = (), 
-                    pbc= true) where T <: Complex where U <: Unsigned
-    x = Dict{U, T}(basis .=> ψ0)
-    y = Dict{U, T}(basis .=> zero(T))
-
+function LTS_evolution!(results, ops, x::Vector{T}, L, ϵ, num_steps; 
+                        J1 = 1.0, 
+                        V1 = 1.0, 
+                        J2 = 0.0, 
+                        V2 = 0.0,
+                        hs = (),
+                        is = (), 
+                        pbc= true) where T <: Complex
+    x = copy(x)
+    y = zeros(T, length(x))
     trotter_steps = get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt=T)
+    basis = build_basis_N(UInt32, L, L÷2)
 
-    chnl = Channel{Tuple{UInt32, ComplexF64}}(3000)
-    num_updates = get_num_local_updates(basis)
-
+    println("\nRunning LTS evolution with $(num_steps) steps")
     for ti in 1:num_steps
+        print("\r    Running time step $(ti)")
         for trotter_step in trotter_steps
-            x, y = apply_trotter_step!(chnl, num_updates, y, x, basis, trotter_step)
+            x, y = apply_trotter_step!(y, x, basis, trotter_step)
         end
-        f(results, x, ti)
+        # f(results, x, ti)
+        record_expectation_values!(results, ops, x, ti, basis, L)
     end
 
     results
 end
 
 """
-Apply the full trotter step update to the state `x` and write the result to `y`.
+Lie-Trotter-Suzuki time evolution.
 """
-function apply_trotter_step!(chnl::Channel{Tuple{U, T}}, num_updates::Int64, y::Dict{U, T}, x::Dict{U, T}, basis::Vector{U}, step::Vector{Tuple{Int64, Int64, NTuple{5, T}}}) where U <: Unsigned where T <: Complex
-    for (l, m, ps) in step
-        x, y = apply_ulm!(chnl, num_updates, y, x, basis, l, m, ps)
-        y.vals .= zero(T) # TODO: This is a bit hacky, but avoids computing hashes.
-    end
-    x, y
+function LTS_evolution!(f, results, x, L, Δ, λ, ϵ, num_steps)
+    J1 = -1/(1+λ)
+    J2 = -λ/(1+λ)
+    V1 = -0.5*Δ/(1+λ)
+    V2 = -0.5*λ*Δ/(1+λ)
+    kwargs = Dict(:J1 => J1, :J2 => J2, :V1 => V1, :V2 => V2)
+    LTS_evolution!(f, results, x, L, ϵ, num_steps; kwargs...)
 end
 
-function get_num_local_updates(basis)
-    num = 0
-    for n in basis
-        v = get_occupations(n, 1, 2)
-        if v in (1, 3)
-            num += 1
-        else
-            num += 2
-        end
-    end
-    num
-end
-
-
-
-###
-### LTS setup functions
-###
-
 """
-Returns an array of tuples, each containing the parameters for a trotter step.
+Returns an array of arrays, each containing the parameters for a trotter step.
 """
 function get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt::DataType=ComplexF64)
     hs = Dict(is .=> hs); h0 = Dict()
@@ -192,7 +109,7 @@ function get_LTS_steps(L, ϵ, J1, V1, J2, V2, hs, is, pbc; elt::DataType=Complex
         ho = h0
     end
 
-    trotter_steps = Vector{Tuple{Int64, Int64, NTuple{5, elt}}}[]
+    trotter_steps = Vector{LocalUpdate{elt}}[]
     if J2 == 0 && V2 == 0
         push!(trotter_steps, [ulm_elements(elt, ϵ/2, J1, V1, he, sites...) for sites in trotter_sites(0, 1, L, pbc)])
         push!(trotter_steps, [ulm_elements(elt, ϵ  , J1, V1, ho, sites...) for sites in trotter_sites(1, 1, L, pbc)])
@@ -241,87 +158,24 @@ function ulm_elements(::Type{T}, ϵ, J, V, hs, l, m) where T <: Complex
     (l, m, convert.(T, (a, b, c, d, e)))
 end
 
-
-###
-### local evolution update functions
-###
-
-"""
-    apply_ulm!(y::Vector{T}, x::Vector{T}, l, m, ps::NTuple{4, T}) where T <: Complex
-
-Writes to `y` the image of state `x` under the two site operator uₗₘ, defined as:
-
-       ⌈a          ⌉
- uₗₘ = ∣   b   e   ∣
-       ∣   e   c   ∣
-       ⌊          d⌋
-
-acting on sites l and m with ps = (a, b, c, d, e).
-"""
-function apply_ulm!(chnl::Channel{Tuple{U, T}}, num_updates::Int64, y::Dict{U, T}, x::Dict{U, T}, 
-                    basis::Vector{U}, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    for tid in 1:Threads.nthreads() 
-        start_task(tid, chnl, basis, x, l, m, ps) 
-    end
-    
-    for _ in 1:num_updates
-        (k, v) = take!(chnl)
-        y[k] += v
-    end
-
-    y, x
-end
-
-function start_task(tid::Int64, chnl::Channel{Tuple{U, T}}, basis::Vector{U}, x, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    @async begin
-        for ni in tid:Threads.nthreads():length(basis)
-            n = basis[ni]
-            V = get_occupations(n, l, m)
-            if V == 0
-                updates = ulm_update(Val{0}(), n, x[n], l, m, ps)
-            elseif V == 1
-                updates = ulm_update(Val{1}(), n, x[n], l, m, ps)
-            elseif V == 2
-                updates = ulm_update(Val{2}(), n, x[n], l, m, ps)
-            else
-                updates = ulm_update(Val{3}(), n, x[n], l, m, ps)
-            end
-
-            for u in updates put!(chnl, u) end
-        end
-    end
-end
-
-function ulm_update(::Val{0}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    ((n, x * ps[1]),)
-end
-
-function ulm_update(::Val{3}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    ((n, x * ps[4]),)
-end
-
-function ulm_update(::Val{1}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    o = flipbits(n, l, m) # here it is assumed l < m
-    ((n, x * ps[2]), (o, x * ps[5]))
-end
-
-function ulm_update(::Val{2}, n::U, x::T, l, m, ps::NTuple{5, T}) where U <: Unsigned where T <: Complex
-    o = flipbits(n, l, m) # here it is assumed l < m
-    ((n, x * ps[3]), (o, x * ps[5]))
-end
-
-
-
 ###
 ### Record expectation value
 ###
 
-function get_expectation_value!(results, op, x, ti, args...; kwargs...)
-    val = 0
-    for (n, amp) in x
-        for (m, weight) in op(n, args...; kwargs...)
-            val += x[n]' * weight * amp
+function record_expectation_values!(results, ops, x::Vector{T}, i, basis::Vector{U}, L) where U <: Unsigned where T <: Complex
+    for (j, (op, args, kwargs)) in enumerate(ops)
+        results[j, i] = get_expectation_value(op, x, basis, L, args...; kwargs...)
+    end
+    results
+end
+
+function get_expectation_value(op, x::Vector{T}, basis::Vector{U}, L, args...; kwargs...) where U <: Unsigned where T <: Complex
+    vals = [zero(T) for _ in 1:Threads.nthreads()]
+    Threads.@threads for n in basis
+        @inbounds amp = x[n+1]
+        for (m, weight) in op(n, L, args...; kwargs...)
+            @inbounds vals[Threads.threadid()] += x[m+1]' * weight * amp
         end
     end
-    results[ti] = val
+    sum(vals)
 end

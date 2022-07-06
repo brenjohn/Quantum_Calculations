@@ -105,11 +105,20 @@ function neighbour_interaction_term!(output, V, d, n, L, pbc)
     output
 end
 
-appy_site_impurity(n::T, L, h, i) where T <: Unsigned = single_site_impurity!(Tuple{T, Float64}[], h, i, n)
+apply_site_impurity(n::T, L, h, i) where T <: Unsigned = single_site_impurity!(Tuple{T, Float64}[], h, i, n)
 
 function single_site_impurity!(output, h, i, n)
     ni = (n >> i) & 1
     s = 2 * ni - 1
+    push!(output, (n, s * h))
+end
+
+apply_sigma_zz(n::T, L, h, i, j) where T <: Unsigned = sigma_zz!(Tuple{T, Float64}[], h, i, j, n)
+
+function sigma_zz!(output, h, i, j, n)
+    ni = (n >> i) & 1
+    nj = (n >> j) & 1
+    s = 2*(ni == nj) - 1
     push!(output, (n, s * h))
 end
 

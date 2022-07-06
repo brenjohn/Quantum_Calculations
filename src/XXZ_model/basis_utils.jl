@@ -8,7 +8,7 @@ using LinearAlgebra: svd
 Return a number whose first two bits encode the occupation numbers of 
 sites `i` and `j`. (Assumes i < j)
 """
-function get_occupations(n::Unsigned, i, j)
+function get_occupations(n::U, i, j) where U <: Unsigned
     ((n & (1 << i)) >> i) + ((n & (1 << j)) >> (j-1))
 end 
 
@@ -22,7 +22,7 @@ end
 """
 Returns an unsigned int equivalent to n but the i-th and j-th bits flipped.
 """
-function flipbits(n::Unsigned, i, j)
+function flipbits(n::U, i, j)::U where U <: Unsigned
     # This function assumes i < j
     m = ((1 << (j - i)) + 1) << i
     n ⊻ m
