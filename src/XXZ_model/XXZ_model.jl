@@ -16,7 +16,6 @@ include("XXZ_basis.jl")
 include("XXZ_operators.jl")
 include("XXZ_sector_matrices.jl")
 include("XXZ_time_evolution.jl")
-# include("XXZ_parallel_time_evolution.jl")
 include("state_utils.jl")
 
 # TODO: The following should be separated into a separate module once it's big enough

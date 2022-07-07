@@ -20,6 +20,7 @@ m = XXZ.translate(n, L)
 A = XXZ.build_matrix(XXZ.apply_A, L)
 B = XXZ.build_matrix(XXZ.apply_B, L)
 
+
 ###
 ### Exact time evolution.
 ###
@@ -40,13 +41,19 @@ end
 Ext_As = [ψ' * A * ψ |> real for ψ in eachcol(ψt)]
 Ext_Bs = [ψ' * B * ψ |> real for ψ in eachcol(ψt)]
 
+
 ###
 ### Lie-Trotter-Suzuki evolution.
 ###
 
-ψt = XXZ.LTS_evolution(ψ0, L, Δ, λ, ϵ, N_steps)
-LTS_As = [ψ' * A * ψ |> real for ψ in eachcol(ψt)]
-LTS_Bs = [ψ' * B * ψ |> real for ψ in eachcol(ψt)]
+results = zeros(ComplexF64, 2, N_steps)
+ops = [
+    (XXZ.apply_A, (), Dict()),
+    (XXZ.apply_B, (), Dict())
+]
+
+XXZ.LTS_evolution!(results, ops, ψ0, L, Δ, λ, ϵ, N_steps)
+
 
 ###
 ### Plot comparison.
@@ -54,11 +61,14 @@ LTS_Bs = [ψ' * B * ψ |> real for ψ in eachcol(ψt)]
 
 f = Figure()
 a = Axis(f[1, 1], xlabel="Time", ylabel="Expectation", title="Time evolution of expectation values.")
-lines!(0:ϵ:ϵ*(N_steps-1), LTS_As, label="LTS A")
-lines!(0:ϵ:ϵ*(N_steps-1), LTS_Bs, label="LTS B")
-
+lines!(ϵ:ϵ:ϵ*(N_steps), real.(results[1, :]), label="LTS A")
+lines!(ϵ:ϵ:ϵ*(N_steps), real.(results[2, :]), label="LTS B")
 lines!(0:ϵ:ϵ*(N_steps-1), Ext_As, label="Exact A")
 lines!(0:ϵ:ϵ*(N_steps-1), Ext_Bs, label="Exact B")
+
 axislegend(a, position = :rb)
 
 # save(joinpath(plotsdir("XXZ"), "LTS_evolution_comparison.png"), f)
+
+# safesave(datadir("impurity_cals", "$L-(L)_N-$(N_steps).jld2"), Dict(:results => results))
+# load(datadir("impurity_cals", "$L-(L)_N-$(N_steps).jld2"), "results")

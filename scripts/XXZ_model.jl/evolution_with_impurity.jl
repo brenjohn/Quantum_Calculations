@@ -1,5 +1,8 @@
 #=
-This script 
+This script time evolves an initial state under both the XXZ Hamiltonian and
+the same Hamiltonian with an impurity on a single site. The expectation value
+of various observables is recorded during the evolutions and compared in a
+plot.
 =#
 
 using DrWatson
@@ -13,24 +16,8 @@ include(srcdir("XXZ_model/XXZ_model.jl"))
 # Utility functions for the simulation.
 #===============================================================#
 
-"""
-Evolves the initial state `ψᵢ` over the time range `t_range` according to the
-factorised hamiltonian `F`. 
-
-Returns, the expectation value of each operator in the iterable `Os` for each 
-time step.
-"""
-function time_evolve(Os, F, t_range, ψᵢ)
-    Ct = zeros(ComplexF64, length(ψᵢ), length(t_range) + 1)
-    Ct[:, 1] = F.vectors' * ψᵢ
-
-    U = cis.(-dt * F.values) |> Diagonal
-    for i in 1:length(t_range)
-        Ct[:, i+1] = U * Ct[:, i]
-    end
-    ψt = F.vectors * Ct #TODO: take expectation values in eigenbasis
-
-    O_avrg = zeros(ComplexF64, length(Os), length(t_range) + 1)
+function expectation_values(Os, ψt)
+    O_avrg = zeros(ComplexF64, length(Os), size(ψt)[2])
     for (j, O) in enumerate(Os)
         for (i, ψ) in enumerate(eachcol(ψt))
             O_avrg[j, i] = ψ' * O * ψ
@@ -38,20 +25,6 @@ function time_evolve(Os, F, t_range, ψᵢ)
     end
     O_avrg
 end
-
-function diagonal_ensemble_average(O, ψ, F)
-    Ō = 0.0
-    O = F.vectors' * O * F.vectors
-    ψ = F.vectors' * ψ
-
-    for n in 1:length(eachcol(F.vectors))
-        Ō += abs(ψ[n])^2 * O[n, n]
-    end
-
-    Ō
-end
-
-
 
 #===============================================================#
 # Perform the simulation and gather results.
@@ -79,40 +52,57 @@ neel_state = 0x55555555 >> (32 - L)
 
 # Create operator matrices to compute expectation values for.
 i = L ÷ 4
-K = XXZ.build_matrix_N(XXZ.apply_K, L, N, 1.0, i, i+1)
-T = XXZ.build_matrix_N(XXZ.apply_T, L, N, 1, pbc)
-SI = XXZ.build_matrix_N(XXZ.appy_site_impurity, L, N, 1.0, i)
-J = XXZ.build_matrix_N(XXZ.apply_J, L, N, 1, pbc)
+K  = XXZ.build_matrix_N(XXZ.apply_K, L, N, 1.0, i, i+1)
+T  = XXZ.build_matrix_N(XXZ.apply_T, L, N, 1, pbc)
+SI = XXZ.build_matrix_N(XXZ.apply_site_impurity, L, N, 1.0, i)
+J  = XXZ.build_matrix_N(XXZ.apply_J, L, N, 1, pbc)
+T2 = XXZ.build_matrix_N(XXZ.apply_T, L, N, 2, pbc)
+B  = XXZ.build_matrix_N(XXZ.apply_B, L, N)
 
 # Time evolve the initial state.
-dt = 0.5; t_range = dt:dt:200
-Ot_xxz = time_evolve([K, T, SI, J], F_xxz, t_range, ψᵢ)
-Ot_si = time_evolve([K, T, SI, J], F_si, t_range, ψᵢ)
+dt = 0.5; steps = 200 ÷ dt |> Int
+ψₜ_xxz = XXZ.time_evolve(ψᵢ, F_xxz, dt, steps)
+ψₜ_si  = XXZ.time_evolve(ψᵢ, F_si, dt, steps)
 
-
+# Compute expectation values.
+obs = [K, T, SI, J, T2, B]
+Ot_xxz = expectation_values(obs, ψₜ_xxz)
+Ot_si  = expectation_values(obs, ψₜ_si)
+diag_averages_xxz = XXZ.diagonal_ensemble_average(obs, ψᵢ, F_xxz)
+diag_averages_si  = XXZ.diagonal_ensemble_average(obs, ψᵢ, F_si)
+micro_averages    = XXZ.micro_canonical_ensemble_average(obs, ψᵢ, F_xxz)
 
 #===============================================================#
-# Plot the results.
+# Plot results.
 #===============================================================#
+
+struct PlotData
+    data_xxz
+    data_si
+    diag_average_xxz
+    diag_average_si
+    micro_average
+    title
+end
+
+function plot_data(Ot_xxz, Ot_si, diag_xxz, diag_si, micro, titles)
+    [PlotData(x...) for x in zip(eachrow.([Ot_xxz, Ot_si])..., diag_xxz, diag_si, micro, titles)]
+end
+
+titles = ["Local Kinetic Energy", "Average Kinetic Energy", "Single Site Magnetisation σᶻᵢ", 
+          "Spin Current Operator", "NNN average kinetic energy", "NN interaction energy"]
+my_plot_data = plot_data(Ot_xxz, Ot_si, diag_averages_xxz, diag_averages_si, micro_averages, titles)
 
 f = Figure(resolution=(2000, 1400), fontsize=35)
-
-a = Axis(f[1, 1], xlabel="t", ylabel="Expectation", title="Local Kinetic Energy")
-lines!(a, [0.0; t_range], Ot_xxz[1, :] |> real, label="XXZ", linewidth=3)
-lines!(a, [0.0; t_range], Ot_si[1, :] |> real, label="SI", linewidth=3)
-
-a = Axis(f[1, 2], xlabel="t", ylabel="Expectation", title="Average Kinetic Energy")
-lines!(a, [0.0; t_range], Ot_xxz[2, :] |> real, label="XXZ", linewidth=3)
-lines!(a, [0.0; t_range], Ot_si[2, :] |> real, label="SI", linewidth=3)
-
-a = Axis(f[2, 1], xlabel="t", ylabel="Expectation", title="Single Site Magnetisation σᶻᵢ")
-lines!(a, [0.0; t_range], Ot_xxz[3, :] |> real, label="XXZ", linewidth=3)
-lines!(a, [0.0; t_range], Ot_si[3, :] |> real, label="SI", linewidth=3)
-
-a = Axis(f[2, 2], xlabel="t", ylabel="Expectation", title="Spin Current Operator")
-lines!(a, [0.0; t_range], Ot_xxz[4, :] |> real, label="XXZ", linewidth=3)
-lines!(a, [0.0; t_range], Ot_si[4, :] |> real, label="SI", linewidth=3)
-
-axislegend(a, position = :rt)
+t_range = 0.0:dt:dt*steps
+for (pane, pd) in zip(CartesianIndices((2, 3)), my_plot_data)
+    pane = Tuple(pane)
+    a = Axis(f[pane...], xlabel="t", ylabel="Expectation", title=pd.title)
+    lines!(a, t_range, pd.data_xxz |> real, label="XXZ", linewidth=3)
+    lines!(a, t_range, pd.data_si |> real, label="SI", linewidth=3)
+    lines!(a, [0.0, dt*steps], real(pd.diag_average_xxz) * [1, 1], label="Diag xxz", linewidth=7, linestyle=:dash, color=:black)
+    lines!(a, [0.0, dt*steps], real(pd.diag_average_si) * [1, 1], label="Diag si", linewidth=7, linestyle=:dot, color=:black)
+    lines!(a, [0.0, dt*steps], real(pd.micro_average) * [1, 1], label="MCE", linewidth=7, color=:black)
+end
 
 # save(joinpath(plotsdir("XXZ"), "evolution_of_observables_with_single_site_impurity.png"), f)
