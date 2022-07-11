@@ -228,3 +228,40 @@ end
 #===========================================================================#
 
 spacial_correlation(n, L, i, j) = [(n, -2 * bits_differ(n, i, j) + 1)]
+
+"""
+Returns the image of the basis state `n` under the total thermal current operator
+as defined in Kluemper 2011 (eqn 2.5)
+
+JE = -i J² ∑ₖ σᶻₖ(σ⁺ₖ₋₁σ⁻ₖ₊₁ - σ⁺ₖ₊₁σ⁻ₖ₋₁) - Δ(σᶻₖ₋₁ + σᶻₖ₊₂)(σ⁺ₖσ⁻ₖ₊₁ - σ⁺ₖ₊₁σ⁻ₖ)
+
+   = -i J² ∑ₖ (2nₖ - 1)(b⁺ₖ₋₁bₖ₊₁ - b⁺ₖ₊₁bₖ₋₁) - Δ(2nₖ₋₁ + 2nₖ₊₂ - 2)(b⁺ₖbₖ₊₁ - b⁺ₖ₊₁bₖ)
+"""
+function apply_JE(n::U, L, J, Δ) where U <: Unsigned
+    output = Tuple{U, ComplexF64}[]
+    Jp = 1im * J^2; Jm = -1im * J^2
+
+    # Assumes periodic boundary conditions
+    for k = 0:L-1
+        # the sign s is used to correct the sign of J when a 
+        # particle moves across the boundary.
+        (i, j, s) = k+2 >= L ? ((k+2)%L, k, -1) : (k, k+2, 1)
+        if bits_differ(n, i, j)
+            m = flipbits(n, i, j)
+            J = m > n ? Jp : Jm # m > n => a 1 has moved to the right.
+            w = 2 * ((n >> ((k+1)%L)) & 1) - 1
+            push!(output, (m, s * w * J))
+        end
+
+        (i, j, s) = k+1 >= L ? ((k+1)%L, k, -1) : (k, k+1, 1)
+        if bits_differ(n, i, j)
+            m = flipbits(n, i, j)
+            J = m > n ? Jp : Jm # m > n => a 1 has moved to the right.
+            w1 = 2 * ((n >> ((k-1+L)%L)) & 1) - 1
+            w2 = 2 * ((n >> ((k+2)%L)) & 1) - 1
+            push!(output, (m, -Δ * (w1 + w2) * s * J))
+        end
+    end
+
+    output
+end
