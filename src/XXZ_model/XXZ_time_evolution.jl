@@ -2,6 +2,8 @@ using LinearAlgebra
 
 # TODO: Avoid storing the full state vector in LTS evolution to make it more memory efficient.
 # TODO: The magnetisation sector should be picked by the user for LTS evolution.
+# TODO: The LTS implementation assumes a particular magnetisation sector. This should be changed by
+#       adding the basis to be used as an input argument.
 
 
 #===============================================================#
