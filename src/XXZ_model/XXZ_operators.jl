@@ -160,7 +160,7 @@ function apply_B(n::Unsigned, L)
     nn = translate(n, L)
     nn = n & nn
     weight = hamming_weight(nn) / L
-    [(n, weight)]
+    ((n, weight),)
 end
 
 #===========================================================================#

@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Polyester
 
 # TODO: Avoid storing the full state vector in LTS evolution to make it more memory efficient.
 # TODO: The magnetisation sector should be picked by the user for LTS evolution.
@@ -102,7 +103,7 @@ function LTS_evolution!(results, ops, x::Vector{T}, L, ϵ, num_steps;
     # Perform the LTS evolution and record results.
     println("\nRunning LTS evolution with $(num_steps) steps")
     for ti in 1:num_steps
-        print("\r    Running time step $(ti)")
+        # print("\r    Running time step $(ti)")
         for trotter_step in trotter_steps
             x, y = apply_trotter_step!(y, x, basis, trotter_step)
         end
@@ -144,14 +145,14 @@ Apply the given local update to the state `x` and store the result in `y`.
 function apply_ulm!(y::Vector{T}, x::Vector{T}, basis::Vector{U}, l, m, ps) where U <: Unsigned where T <: Complex
     # Note, the following for loops are not fused for thread safety.
     # Diagonal terms
-    Threads.@threads for n in basis
+    @batch for n in basis
         @inbounds xn = x[n+1]
         v = get_occupations(n, l, m)
         @inbounds y[n+1] += xn * ps[v+1]
     end
 
     # Off-diagonal terms
-    Threads.@threads for n in basis
+    @batch for n in basis
         if bits_differ(n, l, m)
             @inbounds xn = x[n+1]
             o = flipbits(n, l, m)
