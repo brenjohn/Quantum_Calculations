@@ -24,6 +24,8 @@ the left and moving the rest as far to the right as possible.
 =#
 """
 Produces the next element in the basis of states with equal number of ones.
+
+Assumes current basis element is not zero.
 """
 function next_basis_element(e::T)::T where T <: Union{UInt32, UInt64}
     c = e & -e
@@ -40,9 +42,12 @@ function build_basis_N(T::K, L::Integer, N::Integer) where K <: DataType
     basis = zeros(T, cardinality)
 
     ei = ~(typemax(T) << N)
-    for i in 1:cardinality
+    i = 1
+    while true
         basis[i] += ei
+        i == cardinality && break
         ei = next_basis_element(ei)
+        i += 1
     end
 
     basis

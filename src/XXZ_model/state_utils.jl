@@ -78,3 +78,55 @@ function expectation_value(O, O_args, L, ψ::Dict{U, T}) where U <: Unsigned whe
 
     value
 end
+
+
+#=============================================================#
+# Reduced density                                             #
+#=============================================================#
+
+"""
+Trᵦ(ψψ')ᵢⱼ = ∑ₙ <i|<n|ψ ψ'|n>|j> = ∑ᵢ ψ(ni) * ψ(nj)' 
+"""
+function reduced_density_matrix(ψ::Vector{T}, 
+                                sites::Vector{Int}, 
+                                L,
+                                N
+                                ) where U <: Unsigned where T <: Complex
+    dim = 2^length(sites)
+    ρ = zeros(T, dim, dim)
+
+    reduced_basis = decomposed_basis(UInt32, L, N, sites)
+
+    for (basisA, basisB) in reduced_basis
+        for mi in basisA, mj in basisA
+            for n in basisB
+                ni = get_basis_element(mi, n, sites)
+                nj = get_basis_element(mj, n, sites)
+                ρ[mi+1, mj+1] += ψ[ni+1] * ψ[nj+1]'
+            end
+        end
+    end
+
+    ρ
+end
+
+# Assumes sites is ordered in ascending order.
+function get_basis_element(m::U, n::U, sites) where U <: Unsigned
+    for i in 1:length(sites)
+        mi = (m >> (i-1)) & one(U)
+        n = insert_bit(n, mi, sites[i])
+    end
+    n
+end
+
+function insert_bit(n::U, b::U, site::Int) where U <: Unsigned
+    mask = typemax(U) << site
+    u = mask & n
+    l = ~mask & n
+    (u << 1) | (b << site) | l
+end
+
+function decomposed_basis(U::DataType, L, N, sites)
+    n = length(sites)
+    [(build_basis_N(U, n, i), build_basis_N(U, L-n, N-i)) for i = max(0, N-L+n):min(n, N)]
+end
