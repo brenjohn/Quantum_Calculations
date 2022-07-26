@@ -85,48 +85,59 @@ end
 #=============================================================#
 
 """
+Compute the reduced density matrix for the subsystem of the `L`-site
+XXZ chain, in state `ψ`, defined by the sites conatined in `sites`.
+
 Trᵦ(ψψ')ᵢⱼ = ∑ₙ <i|<n|ψ ψ'|n>|j> = ∑ᵢ ψ(ni) * ψ(nj)' 
 """
-function reduced_density_matrix(ψ::Vector{T}, 
-                                sites::Vector{Int}, 
-                                L,
-                                N
-                                ) where U <: Unsigned where T <: Complex
-    dim = 2^length(sites)
-    ρ = zeros(T, dim, dim)
-
+function reduced_density_matrix!(
+                            ρ::Matrix{T},
+                            ψ::Vector{T}, 
+                            sites::Vector{Int}, 
+                            L,
+                            N
+                            ) where U <: Unsigned where T <: Complex
     reduced_basis = decomposed_basis(UInt32, L, N, sites)
 
     for (basisA, basisB) in reduced_basis
         for mi in basisA, mj in basisA
             for n in basisB
-                ni = get_basis_element(mi, n, sites)
-                nj = get_basis_element(mj, n, sites)
+                ni = insert_bits(n, mi, sites)
+                nj = insert_bits(n, mj, sites)
                 ρ[mi+1, mj+1] += ψ[ni+1] * ψ[nj+1]'
             end
         end
     end
+    nothing
+end
 
+function reduced_density_matrix(ψ::Vector{T}, args...) where T <: Complex
+    dim = 2^length(sites)
+    ρ = zeros(T, dim, dim)
+    reduced_density_matrix!(ρ, ψ, args...)
     ρ
 end
 
-# Assumes sites is ordered in ascending order.
-function get_basis_element(m::U, n::U, sites) where U <: Unsigned
-    for i in 1:length(sites)
-        mi = (m >> (i-1)) & one(U)
-        n = insert_bit(n, mi, sites[i])
-    end
-    n
-end
+"""
+Return an array of basis pairs representing `N`-particale basis states of the 
+subsystems A and B. A is the subsystem of the `L`-site XXZ chain defined by
+the sites contained in `sites` and B is the complement subsystem.
 
-function insert_bit(n::U, b::U, site::Int) where U <: Unsigned
-    mask = typemax(U) << site
-    u = mask & n
-    l = ~mask & n
-    (u << 1) | (b << site) | l
-end
-
+Each element in the array has a pair of basis sets corresponding to a fixed
+number of particles in each subsystem.
+"""
 function decomposed_basis(U::DataType, L, N, sites)
     n = length(sites)
     [(build_basis_N(U, n, i), build_basis_N(U, L-n, N-i)) for i = max(0, N-L+n):min(n, N)]
+end
+
+"""
+Compute the trace distance between density matrices `ρ` and `σ`.
+
+d(ρ, σ) = 1/2 * Tr[ √(ρ - σ)† * (ρ - σ) ]
+"""
+function trace_distance(ρ, σ)
+    U = ρ - σ
+    d = (U' * U) |> sqrt |> diag |> sum
+    d / 2
 end

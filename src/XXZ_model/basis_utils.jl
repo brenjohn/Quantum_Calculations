@@ -62,6 +62,31 @@ function translate(n::U, L)::U where U <: Unsigned
 end
 
 """
+Shift, by one place, all the bits from position `site` onwards. Then set
+the bit at position `site` as `b`.
+"""
+function insert_bit(n::U, b::U, site::Int) where U <: Unsigned
+    mask = typemax(U) << site
+    u = mask & n
+    l = ~mask & n
+    (u << 1) | (b << site) | l
+end
+
+"""
+Returns the integer created by inserting the bits contained in `m` into
+the binary representation of `n` at positions conatined in `sites`. 
+
+Assumes the iterable `sites` is ordered in ascending order.
+"""
+function insert_bits(n::U, m::U, sites::Vector{Int}) where U <: Unsigned
+    for i in 1:length(sites)
+        mi = (m >> (i-1)) & one(U)
+        n = insert_bit(n, mi, sites[i])
+    end
+    n
+end
+
+"""
 Returns the number of aligned neigbours that are a distance i apart.
 """
 function number_of_aligned_neighbours(n::U, i, L, pbc=true) where U <: Union{UInt64, UInt32}

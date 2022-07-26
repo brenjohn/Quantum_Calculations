@@ -69,8 +69,8 @@ operators in the `ops` argument are calculated and stored in the
 This implementation is multi-threaded.
 
 # arguments
-- `results`: A variable to store expectation values.
-- `ops`: An array of operators to record expectation values for.
+- `record_result`: A function closure to record desired results. 
+                   It should accept a state and time step as arguments.
 - `x`: The initial state to be eolved.
 - `L`: The length of the XXZ chain.
 - `ϵ`: The time step to be used for the evolution.
@@ -85,14 +85,15 @@ This implementation is multi-threaded.
 - `is`: An iterable containing the locations of single site impurities.
 - `pbs`: `true` if periodic boundary conditions are to be imposed.
 """
-function LTS_evolution!(results, ops, x::Vector{T}, L, ϵ, num_steps; 
+function LTS_evolution!(record_result, x::Vector{T}, L, ϵ, num_steps; 
                         J1 = 1.0, 
                         V1 = 1.0, 
                         J2 = 0.0, 
                         V2 = 0.0,
                         hs = (),
                         is = (), 
-                        pbc= true) where T <: Complex
+                        pbc= true,
+                        verbose = false) where T <: Complex
     # Set up variables for the time evolution.
     ti = time()
     x = copy(x)
@@ -103,28 +104,28 @@ function LTS_evolution!(results, ops, x::Vector{T}, L, ϵ, num_steps;
     # Perform the LTS evolution and record results.
     println("\nRunning LTS evolution with $(num_steps) steps")
     for ti in 1:num_steps
-        # print("\r    Running time step $(ti)")
+        verbose && print("\r    Running time step $(ti)")
         for trotter_step in trotter_steps
             x, y = apply_trotter_step!(y, x, basis, trotter_step)
         end
-        record_expectation_values!(results, ops, x, ti, basis, L)
+        record_result(x, ti)
     end
 
     println("\nTime taken by LTS evolution: $(time() - ti)\n")
-    results
+    nothing
 end
 
 """
 Use Lie-Trotter-Suzuki time evolution with the parameterisation
 of the Hamiltonian used in the Jung-Hoon 2020 tutorial.
 """
-function LTS_evolution!(results, ops, x, L, Δ, λ, ϵ, num_steps)
+function LTS_evolution!(record_result, x, L, Δ, λ, ϵ, num_steps)
     J1 = -1/(1+λ)
     J2 = -λ/(1+λ)
     V1 = -0.5*Δ/(1+λ)
     V2 = -0.5*λ*Δ/(1+λ)
     kwargs = Dict(:J1 => J1, :J2 => J2, :V1 => V1, :V2 => V2)
-    LTS_evolution!(results, ops, x, L, ϵ, num_steps; kwargs...)
+    LTS_evolution!(record_result, x, L, ϵ, num_steps; kwargs...)
 end
 
 """
