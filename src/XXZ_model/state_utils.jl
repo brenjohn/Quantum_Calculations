@@ -1,3 +1,5 @@
+using Polyester
+
 #=============================================================#
 # Utility functions for computing entanglement entropy        #
 #=============================================================#
@@ -68,15 +70,14 @@ micro_canonical_ensemble_average(Os::Vector{T}, ψ, F) where T <: Matrix = [micr
 
 # TODO: This assumes the N-particle sector is being used
 function expectation_value(O, O_args, L, ψ::Dict{U, T}) where U <: Unsigned where T <: Complex
-    value = zero(T)
 
-    for (n, amp) in pairs(ψ)
+    @batch threadlocal = zero(T)::T for (n, amp) in pairs(ψ)
         for (m, weight) in O(n, L, O_args...)
-            value += ψ[m]' * weight * amp
+            threadlocal += ψ[m]' * weight * amp
         end
     end
 
-    value
+    sum(threadlocal)
 end
 
 
@@ -96,11 +97,15 @@ function reduced_density_matrix!(
                             sites::Vector{Int}, 
                             L,
                             N
-                            ) where U <: Unsigned where T <: Complex
+                            ) where T <: Complex
     reduced_basis = decomposed_basis(UInt32, L, N, sites)
 
     for (basisA, basisB) in reduced_basis
-        for mi in basisA, mj in basisA
+        l = length(basisA)
+        @batch for I in CartesianIndices((l, l))
+            i, j = Tuple(I)
+            mi = basisA[i] 
+            mj = basisA[j]
             for n in basisB
                 ni = insert_bits(n, mi, sites)
                 nj = insert_bits(n, mj, sites)
