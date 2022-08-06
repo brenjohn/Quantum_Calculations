@@ -27,7 +27,7 @@ Produces the next element in the basis of states with equal number of ones.
 
 Assumes current basis element is not zero.
 """
-function next_basis_element(e::T)::T where T <: Union{UInt32, UInt64}
+function next_basis_element(e::U)::U where U <: Unsigned
     c = e & -e
     r = e + c
     (((r ⊻ e) >> 2) ÷ c) | r

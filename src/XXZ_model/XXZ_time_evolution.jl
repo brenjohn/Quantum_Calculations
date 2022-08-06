@@ -265,12 +265,12 @@ end
 Compute the expectation value of the given operator `op` with respect to the given state vector `x`.
 """
 function get_expectation_value(op, x::Vector{T}, basis::Vector{U}, L, args...; kwargs...) where U <: Unsigned where T <: Complex
-    vals = [zero(T) for _ in 1:Threads.nthreads()]
-    Threads.@threads for n in basis
+    # vals = [zero(T) for _ in 1:Threads.nthreads()]
+    @batch threadlocal = zero(T)::T for n in basis
         @inbounds amp = x[n+1]
         for (m, weight) in op(n, L, args...; kwargs...)
-            @inbounds vals[Threads.threadid()] += x[m+1]' * weight * amp
+            @inbounds threadlocal += x[m+1]' * weight * amp
         end
     end
-    sum(vals)
+    sum(threadlocal)
 end

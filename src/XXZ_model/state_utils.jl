@@ -146,3 +146,12 @@ function trace_distance(ρ, σ)
     d = (U' * U) |> sqrt |> diag |> sum
     d / 2
 end
+
+function purity(ρ)
+    (ρ * ρ) |> diag |> sum
+end
+
+function von_Neumann_entropy(ρ)
+    d = (ρ * log(ρ)) |> diag
+    -sum(d)
+end

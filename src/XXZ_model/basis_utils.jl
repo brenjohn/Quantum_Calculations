@@ -1,7 +1,7 @@
 using LinearAlgebra: svd
 
 #=============================================================#
-# Utility functions for generating XXZ hamiltonians and basis #
+# Utility functions for operating on basis elements           #
 #=============================================================#
 
 """
@@ -65,7 +65,7 @@ end
 Shift, by one place, all the bits from position `site` onwards. Then set
 the bit at position `site` as `b`.
 """
-function insert_bit(n::U, b::U, site::Int) where U <: Unsigned
+function insert_bit(n::U, b::U, site::Integer) where U <: Unsigned
     mask = typemax(U) << site
     u = mask & n
     l = ~mask & n
@@ -78,7 +78,7 @@ the binary representation of `n` at positions conatined in `sites`.
 
 Assumes the iterable `sites` is ordered in ascending order.
 """
-function insert_bits(n::U, m::U, sites::Vector{Int}) where U <: Unsigned
+function insert_bits(n::U, m::U, sites) where U <: Unsigned
     for i in 1:length(sites)
         mi = (m >> (i-1)) & one(U)
         n = insert_bit(n, mi, sites[i])
@@ -152,3 +152,95 @@ end
 #     d = T === UInt32 ? 24 : 56
 #     return (b * h01) >> d
 # end
+
+
+#=
+Below are implementations of ranking and unranking algorithms for 
+k-combinations as described in:
+https://en.wikipedia.org/wiki/Combinatorial_number_system
+
+These can be used to convert between N-particle basis element and 
+corresponding basis index.
+
+Ranking:
+Works by counting the number of basis elements are less than the given
+element (i.e. the number of elements that come before the given element
+in lexicographical order)
+
+rank(n) = ∑ᵢ n-Choose-k(ci, i),
+
+where ci is the position of the i-th bit in `n` (first position is zero).
+Note, n-Choose-k(ci, i) is the number of i-particle elements that are less
+than 2^ci.
+
+
+Unranking:
+Works by finding the most significant bit of the corresponding
+element first and working backwards. i.e. by finding the largest
+cN such that n-Choose-k(cN, N) is less than `rank` and repeats
+to find largest c(N-1) such that n-Choose-k(cN-1, N-1) is less 
+than N - nCk(cN, N) and so on.
+=#
+
+"""
+Map an index to it's corresponding N-particle basis element.
+"""
+function unranking(rank::T, N::Int) where T <: Integer
+    n = zero(UInt32)
+    for i in N:-1:1
+        ci = i-1
+        while nCk(ci, i) <= rank
+            ci += 1
+        end
+        n |= (one(UInt32) << (ci-1))
+        rank -= nCk(ci-1, i)
+    end
+    n
+end
+
+"""
+Map an N-particle basis element to it's corresponding index.
+"""
+function ranking(n::U, N::Int) where U <: Unsigned
+    rank = 0
+    bits = 0
+    mask = 1
+    i = 0
+    ci = 0
+    while bits < N
+        if mask & n != 0
+            bits += 1
+            i += 1
+            rank += nCk(ci, i)
+        end
+        ci += 1
+        n >>= 1
+    end
+    rank
+end
+
+"""
+A less general, less robust, stripped down version of Julia's binomial function
+which should compute n-choose-k a little faster.
+
+n C k = n!/(n-k!)k! = ∏ₖᵢ (n - k + ki)/ki 
+"""
+function nCk(n::T, k::T) where T <: Integer
+    k >= n && return Int64(k == n)
+    k == 1 && return n
+
+    if k > (n>>1)
+        k = (n - k)
+    end
+
+    x = ni = n - k + one(T)
+    ni += 1
+    ki = 2
+
+    while ki <= k
+        x = div(x * ni, ki)
+        ki += 1
+        ni += 1
+    end
+    x
+end
